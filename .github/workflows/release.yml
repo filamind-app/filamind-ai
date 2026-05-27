@@ -77,7 +77,11 @@ jobs:
           mkdir -p _verify
           tar xf "_artifacts/Filamind-${{ steps.meta.outputs.version }}-dva3221.spk" -C _verify
           v=$(grep '^version' _verify/INFO | sed 's/.*"\(.*\)".*/\1/')
-          tarv=$(tar xzOf _verify/package.tgz bin/control_daemon.py 2>/dev/null | grep '^DAEMON_VERSION' | sed 's/.*"\(.*\)".*/\1/')
+          # The control_daemon.py path inside package.tgz is './bin/control_daemon.py'
+          # (the tar was created from `cd package && tar cf .` which prefixes everything
+          # with ./). Match either form.
+          tarv=$(tar xzOf _verify/package.tgz ./bin/control_daemon.py 2>/dev/null | grep '^DAEMON_VERSION' | sed 's/.*"\(.*\)".*/\1/')
+          [ -z "$tarv" ] && tarv=$(tar xzOf _verify/package.tgz bin/control_daemon.py 2>/dev/null | grep '^DAEMON_VERSION' | sed 's/.*"\(.*\)".*/\1/')
           echo "DVA3221 SPK INFO version: $v   DAEMON_VERSION: $tarv"
           if [ "$tarv" != "${{ steps.meta.outputs.version }}" ]; then
             echo "::error::DVA3221 SPK was built but DAEMON_VERSION inside is '$tarv', expected '${{ steps.meta.outputs.version }}'"
