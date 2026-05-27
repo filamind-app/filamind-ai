@@ -1,0 +1,136 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  # ─── Build SPK for each device branch and attach to the Release ────────
+  build-and-release:
+    name: Build SPK + GitHub Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      sha:     ${{ steps.meta.outputs.sha }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Extract version metadata
+        id: meta
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          SHA="$(git rev-parse --short HEAD)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA"         >> "$GITHUB_OUTPUT"
+          echo "Building Release $TAG (sha $SHA)"
+
+      - name: Build DVA 3221 SPK (CUDA GPU)
+        run: |
+          git fetch origin device/dva3221:device/dva3221
+          git checkout device/dva3221
+          # On dva3221 branch the compiled llama-server / llama-main are tracked.
+          # Patch the build script for the CI runner's paths.
+          sed -i "s|/mnt/c/Users/Eg2/Desktop/saynolgy|$PWD|g" build_spk.sh
+          bash build_spk.sh
+          mkdir -p _artifacts
+          mv Filamind.spk "_artifacts/Filamind-${{ steps.meta.outputs.version }}-dva3221.spk"
+          ls -lh _artifacts/
+
+      - name: Build DS1821+ SPK (CPU AVX2) — best effort
+        continue-on-error: true     # build script may not be wired up yet
+        run: |
+          git checkout device/ds1821-plus
+          # Stub binary if the CPU build script hasn't produced one yet.
+          mkdir -p spk-source/package/bin
+          [ -f spk-source/package/bin/llama-server ] || echo "stub" > spk-source/package/bin/llama-server
+          [ -f spk-source/package/bin/llama-main   ] || echo "stub" > spk-source/package/bin/llama-main
+          sed -i "s|/mnt/c/Users/Eg2/Desktop/saynolgy|$PWD|g" build_spk.sh
+          bash build_spk.sh
+          mv Filamind.spk "_artifacts/Filamind-${{ steps.meta.outputs.version }}-ds1821-plus.spk" || true
+          ls -lh _artifacts/ || true
+
+      - name: Compute checksums
+        run: |
+          cd _artifacts
+          sha256sum *.spk > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        run: |
+          # Pull the section for this version out of CHANGELOG.md
+          VERSION="${{ steps.meta.outputs.version }}"
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { capture=1; print; next }
+            capture && /^## \[/ { exit }
+            capture { print }
+          ' CHANGELOG.md > _artifacts/RELEASE_NOTES.md
+          if [ ! -s _artifacts/RELEASE_NOTES.md ]; then
+            echo "## Filamind AI v$VERSION" > _artifacts/RELEASE_NOTES.md
+            echo "" >> _artifacts/RELEASE_NOTES.md
+            echo "See [CHANGELOG.md](https://github.com/filamind-app/filamind-ai/blob/main/CHANGELOG.md) for details." >> _artifacts/RELEASE_NOTES.md
+          fi
+          echo "---" >> _artifacts/RELEASE_NOTES.md
+          echo "## Install · التثبيت" >> _artifacts/RELEASE_NOTES.md
+          echo "" >> _artifacts/RELEASE_NOTES.md
+          echo "**Recommended (one-click updates):** add the Package Source URL once:" >> _artifacts/RELEASE_NOTES.md
+          echo "" >> _artifacts/RELEASE_NOTES.md
+          echo "> DSM → Package Center → Settings → Package Sources → Add" >> _artifacts/RELEASE_NOTES.md
+          echo "> Location: \`https://filamind-app.github.io/filamind-ai/\`" >> _artifacts/RELEASE_NOTES.md
+          echo "" >> _artifacts/RELEASE_NOTES.md
+          echo "**Manual install:** download the SPK matching your device and upload via Package Center → Manual Install." >> _artifacts/RELEASE_NOTES.md
+          echo "" >> _artifacts/RELEASE_NOTES.md
+          echo "| Device | SPK |" >> _artifacts/RELEASE_NOTES.md
+          echo "|---|---|" >> _artifacts/RELEASE_NOTES.md
+          [ -f "_artifacts/Filamind-${VERSION}-dva3221.spk" ]      && echo "| DVA 3221 (GTX 1650, CUDA) | \`Filamind-${VERSION}-dva3221.spk\` |"       >> _artifacts/RELEASE_NOTES.md
+          [ -f "_artifacts/Filamind-${VERSION}-ds1821-plus.spk" ]  && echo "| DS1821+ (Ryzen V1500B, CPU AVX2) | \`Filamind-${VERSION}-ds1821-plus.spk\` |" >> _artifacts/RELEASE_NOTES.md
+          cat _artifacts/RELEASE_NOTES.md
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:  ${{ steps.meta.outputs.tag }}
+          name:      Filamind AI ${{ steps.meta.outputs.tag }}
+          body_path: _artifacts/RELEASE_NOTES.md
+          files: |
+            _artifacts/*.spk
+            _artifacts/SHA256SUMS
+          draft: false
+          prerelease: ${{ contains(steps.meta.outputs.version, 'rc') || contains(steps.meta.outputs.version, 'beta') || contains(steps.meta.outputs.version, 'alpha') }}
+
+  # ─── Refresh GitHub Pages (Package Source) ─────────────────────────────
+  publish-pages:
+    name: Refresh Package Source (Pages)
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Generate packages.json for DSM
+        env:
+          VERSION: ${{ needs.build-and-release.outputs.version }}
+        run: |
+          mkdir -p _pages
+          cp -r docs/* _pages/ 2>/dev/null || true
+          python3 docs/_build_packages_json.py "$VERSION" > _pages/packages.json
+          ls -la _pages/
+          cat _pages/packages.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _pages
+      - id: deploy
+        uses: actions/deploy-pages@v4

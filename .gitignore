@@ -79,6 +79,12 @@ agents.db
 saynologyai.conf
 filamindai.conf
 
+# === Private / out-of-scope directories that must never be committed ===
+dmca-grazrib/
+secrets/
+private/
+.secrets/
+
 # === macOS / Windows cruft ===
 .AppleDouble
 .LSOverride

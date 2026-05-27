@@ -17,6 +17,111 @@ Following [Keep a Changelog](https://keepachangelog.com/) — تصنيفات: **
 
 ---
 
+## [1.3.0] — 2026-05-27
+
+**MCP — Model Context Protocol runtime + 8 Tier-A tool servers** · أول إصدار يمنح المساعد القدرة على استدعاء أدوات حقيقية أثناء المحادثة.
+
+### Added — MCP Runtime
+- **`package/bin/mcp_runtime.py`** (~300 lines) — in-process MCP-style tool registry with:
+  - `ToolServer` base class + `Tool` descriptor (name, JSON-schema parameters, handler, `sensitive` flag for audit-log redaction).
+  - **Format adapters**: `tool.as_openai()` / `tool.as_anthropic()` (input_schema) / `tool.as_gemini()` (function_declarations). One source of truth, three cloud-provider wire formats.
+  - **`registry.call(tool, args, user_id, agent_id, hop)`** — dispatches, audit-logs, and enforces:
+    - **Rate limit**: 60 calls/hour/user (configurable, sliding window).
+    - **Hop limit**: 8 tool-call hops per chat turn (prevents runaway loops).
+  - **SQLite audit log** at `/var/packages/FilamindAI/etc/mcp.db` with `mcp_audit` (id, ts, user_id, agent_id, tool, server, args_json, result_size, duration_ms, ok, error) and `mcp_servers` (name, enabled, config_json) tables. Indexed on `ts DESC` and `(user_id, ts DESC)` for fast UI queries.
+  - **Sensitive-args redaction** — tools marked `sensitive=True` (e.g. `shell.run`) get `<redacted>` in the audit log instead of the raw arguments.
+
+### Added — 8 built-in Tool servers (Tier A)
+- **`calculator.eval`** — safe arithmetic via AST whitelist. Allows `+ - * / // % **`, `abs/round/min/max/sum/len/pow/int/float`, and constants `pi`, `e`. Blocks `import`, attribute access, lambdas, and unknown names.
+- **`datetime.now` / `.parse` / `.offset`** — current time (UTC + local + epoch + weekday), parse 7+ common formats, add/subtract seconds.
+- **`memory.set` / `.get` / `.list` / `.delete`** — persistent KV store in SQLite, 128-char key cap, 4 KB value cap.
+- **`nas_info.snapshot`** — CPU count + load averages, total/available memory, disk usage per `/volume*`, GPU presence (`/dev/nvidia*`), uptime, hostname.
+- **`filesystem.read_file` / `.list_dir`** — UTF-8 file read + directory listing under admin-defined `allow_roots` (defaults: `/volume1/FilamindAI/shared`, `/volume1/AI/shared`). 256 KB read cap. Path-traversal blocked via `realpath` + `commonpath` check.
+- **`fetch.get`** — HTTPS GET against `allow_hosts` (defaults: github.com, huggingface.co, wikipedia.org, duckduckgo.com). 200 KB body cap, 10s timeout. Resolves DNS and refuses any private/RFC1918 IP (defeats DNS rebinding).
+- **`shell.run`** — execute a command **only if** its exact string is in the admin's `allow_commands` list. Default list is empty → disabled until opted in. Suggests safe defaults: `uptime`, `df -h`, `free -h`, `uname -a`, `date`, `hostname`. Marked `sensitive` so args don't appear in the audit log.
+- **`sqlite.query`** — read-only SELECT against SQLite files under allow-listed roots. Returns max 200 rows. Refuses anything that doesn't start with `SELECT` (case-insensitive).
+
+### Added — Daemon endpoints
+- **`GET /api/mcp/servers`** — list registered servers + their tools + enabled state.
+- **`GET /api/mcp/tools`** — flat list of all enabled tools (used by future cloud-provider tool-injection).
+- **`GET /api/mcp/audit`** (admin) — last 100 audit log entries.
+- **`POST /api/mcp/servers/<name>/toggle`** (admin) — `{"enabled": true|false}` enable / disable.
+- **`POST /api/mcp/call`** — execute a tool. Body: `{"tool": "calculator.eval", "args": {"expression": "2+2"}}`. Returns `{ok, result, server, duration_ms}` or `{ok:false, error, type}` on tool-not-found / rate-limit / hop-limit.
+
+### Added — UI (Settings → MCP)
+- Replaces the v1.2.0 "Coming in v1.3" placeholder with a real management surface:
+  - **Server list** with per-server enable/disable toggle, tool count, expandable tool descriptions.
+  - **Tool tester** — dropdown of all enabled tools + JSON arg input + Run button + result viewer.
+  - **Audit log viewer** (admin only) — last 100 calls in a sortable table: timestamp, tool, duration, success/error.
+  - Roadmap card listing Tier-B cloud integrations (Brave/Tavily search, GitHub, Home Assistant, Synology APIs) shipping in v1.3.1.
+- 18 new i18n keys under `mcp.*` in both `en.json` and `ar.json` (natural Arabic phrasing — "قائمة الأدوات" / "سجل التدقيق").
+
+### Not yet wired (will follow in v1.3.0.x patches)
+- **Tool-call loop in `_chat_router`** — endpoint-level tool injection per provider + auto-execution of returned `tool_calls` + multi-hop continuation. The runtime supports it; the chat router hasn't been touched yet.
+- **Per-agent allow-lists** — agents table will get a `tools` JSON column; admin UI will pick which tools each agent can call.
+- **Tier C subprocess servers** (puppeteer, real git, pdf) — needs Node.js bundled with the SPK; deferred to v1.4.
+
+### Build / install
+- New files inside the SPK: `package/bin/mcp_runtime.py`, `package/bin/mcp_servers.py`. The daemon adds them to `sys.path` at boot and lazy-imports, so a missing/broken MCP module degrades gracefully (the daemon still serves chat).
+- `mcp.db` created on first boot under `etc/`. No migration needed for existing installs.
+
+---
+
+## [1.2.6] — 2026-05-27
+
+إصلاح فشل التثبيت على الأجهزة بدون GPU · Fix install failure on GPU-less devices.
+
+### Fixed
+- **DS1821+ (and any non-DVA Synology) install failed at `preinst`** with `No NVIDIA GPU detected (/dev/nvidia0 missing) — End preinst ret=[1]`. The pre-install hook unconditionally required an NVIDIA GPU + the NVIDIARuntimeLibrary package, which is correct for the DVA-3221 build but completely wrong for the CPU-only DS1821+ build. Root cause: a single `scripts/preinst` was shipped on both device branches without specialization.
+- **`preinst` is now capability-aware** — reads the `model="…"` field from the staging INFO file and:
+  - `synology_denverton_dva3221` → still requires NVIDIA + the runtime library (with a friendlier error pointing users to the CPU build link if no GPU).
+  - any other model (incl. `synology_v1000_1821+`) → CPU-only path, only checks that `python3` is present.
+- Error messages on the GPU path now tell users explicitly which SPK to download if they're on the wrong device.
+
+### Notes
+- The fix is identical across `main`, `device/dva3221`, and `device/ds1821-plus` — a single smart preinst replaces what would otherwise need per-branch divergence.
+- Diagnostic that found the root cause: `sudo tail /var/log/synopkg.log` on the failing NAS showed `Begin preinst` immediately followed by `End preinst ret=[1]`, with `No NVIDIA GPU detected` in `/var/log/messages`.
+
+---
+
+## [1.2.5] — 2026-05-27
+
+بنية الإصدارات + DSM Package Source + صفحة "حول التطبيق" داخل الـ UI · Release infrastructure + DSM Package Source + in-app About tab.
+
+### Added
+- **New Settings → About tab** showing everything a user needs to know about their install:
+  - Installed package version + DSM version + git revision + build date.
+  - Inference engine description (e.g. `llama.cpp b1620 + CUDA 10.1 (GPU)` on DVA 3221, `llama.cpp latest + CPU AVX2` on DS1821+).
+  - **"Check for updates"** button — calls GitHub Releases API, shows the latest version with release notes and a download link if an update is available.
+  - **Embedded release history** rendered from the packaged `CHANGELOG.md`.
+  - Quick-links: source code, issue tracker, full changelog, discussions, maintainer email.
+- **`/api/version`** endpoint enriched — returns `daemon_version`, `package_version`, `displayname`, `model`, `arch`, `dsm_version`, `engine`, `build_date`, `git_sha`, `git_branch`, `maintainer`, plus repo / release URLs.
+- **`/api/changelog`** endpoint — serves the bundled `CHANGELOG.md` (text/markdown). The build script now copies `CHANGELOG.md` into the package so the file is available offline at `/var/packages/FilamindAI/target/CHANGELOG.md`.
+- **`/api/check-update`** endpoint — hits `api.github.com/repos/filamind-app/filamind-ai/releases/latest`, compares to the running version, returns `{current, latest, update_available, release_url, release_notes, spk_download, published_at}`. Cached for 1 hour so a chatty UI doesn't spam GitHub.
+- **`docs/` folder** that GitHub Pages publishes at `https://filamind-app.github.io/filamind-ai/` — this URL is a valid **third-party DSM Package Source**. Users add it once to **Package Center → Settings → Package Sources** and DSM offers one-click updates from then on.
+- **`docs/_build_packages_json.py`** — generator that emits `packages.json` in the format DSM expects, with separate entries for `synology_denverton_dva3221` (DVA 3221) and `synology_v1000_1821+` (DS1821+).
+- **`.github/workflows/release.yml`** — triggered on `v*.*.*` tag pushes. Builds both device SPKs, computes SHA-256 sums, extracts the matching section from `CHANGELOG.md` as release notes, attaches everything to a GitHub Release, and re-publishes `packages.json` to Pages.
+- **`BUILD_INFO`** file emitted inside the package by `build_spk.sh` — captures `BUILD_DATE`, `GIT_SHA`, `GIT_BRANCH`, `DAEMON_VERSION` so the About tab can show provenance even on a freshly-installed SPK with no network access.
+- 28 new i18n keys under `about.*` translated into both English and Arabic (natural Arabic phrasing, e.g. "حول التطبيق" for tab title, "أنت على أحدث إصدار" for up-to-date state).
+
+### Changed
+- **`build_spk.sh`** now bundles `CHANGELOG.md` and writes `BUILD_INFO` automatically. No-op if `git` isn't available — `BUILD_INFO` still gets a `BUILD_DATE` line.
+- **CI `Build SPK` job** runs on pull requests too (artifact upload limited to push-to-main). Catches packaging regressions before merge.
+
+### How users discover updates from now on
+
+After installing this version (manually, once), three things change:
+
+1. **In-app banner / About tab** — opens `/api/check-update` on demand, surfaces a green "Update available" card with a one-click SPK download.
+2. **DSM Package Center** — if the user added `https://filamind-app.github.io/filamind-ai/` as a Package Source, DSM shows the package under **Community** with an Update button when a newer version is published.
+3. **GitHub Releases page** — every tag push produces a release with attached SPKs for every supported device + SHA256SUMS.
+
+### Migration / install notes
+- **Already on 1.2.4?** Settings → System → Restart, or wait for the next package upgrade. About tab works immediately.
+- **Fresh install + Package Source URL:** add the URL *before* installing if you want DSM to know about updates from day one.
+
+---
+
 ## [1.2.4] — 2026-05-27
 
 إعادة تسمية المشروع إلى **Filamind AI** + بنية ريبو GitHub + بدء دعم DS1821+ · Rebranded to **Filamind AI** + GitHub repo bootstrap + DS1821+ second-device support.

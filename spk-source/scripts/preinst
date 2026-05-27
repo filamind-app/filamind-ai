@@ -1,16 +1,58 @@
 #!/bin/sh
-# Pre-install hook — verify GPU + NVIDIA Runtime Library
+# Pre-install hook — capability check tailored to the build target.
+#
+# Reads the `model` field from the INFO file that DSM extracted into the
+# staging dir and decides what hardware the build requires:
+#
+#   synology_denverton_dva3221 → requires NVIDIA GPU + NVIDIARuntimeLibrary
+#   any other model (v1000 …)  → CPU-only build, no GPU requirement
+#
+# DSM exports SYNOPKG_TEMP_FOLDER pointing at the staging directory during
+# preinst. Older docs call it differently per DSM version; we fall back through
+# a few common locations.
 
-# Check NVIDIA driver
-if [ ! -e /dev/nvidia0 ]; then
-    echo "No NVIDIA GPU detected (/dev/nvidia0 missing)" >&2
-    exit 1
+find_info() {
+    for d in \
+        "$SYNOPKG_TEMP_FOLDER" \
+        "$SYNOPKG_PKGDEST_VOL" \
+        "/var/packages/$SYNOPKG_PKGNAME" \
+        "/tmp/synopkg_extract"; do
+        [ -n "$d" ] && [ -f "$d/INFO" ] && { echo "$d/INFO"; return; }
+    done
+    # Last resort: search /tmp for an INFO file staged by synopkg
+    find /tmp -maxdepth 4 -name INFO -path '*synopkg*' 2>/dev/null | head -1
+}
+
+INFO_FILE="$(find_info)"
+MODEL=""
+if [ -n "$INFO_FILE" ] && [ -f "$INFO_FILE" ]; then
+    MODEL="$(grep -E '^model="' "$INFO_FILE" 2>/dev/null | sed 's/^model="\([^"]*\)".*/\1/')"
 fi
 
-# Check NVIDIARuntimeLibrary
-if [ ! -d "/var/packages/NVIDIARuntimeLibrary/target/cuda/lib64" ]; then
-    echo "NVIDIARuntimeLibrary package not installed or incomplete" >&2
-    exit 1
-fi
+case "$MODEL" in
+    synology_denverton_dva3221)
+        # GPU build → require NVIDIA hardware and the CUDA runtime package
+        if [ ! -e /dev/nvidia0 ]; then
+            echo "Filamind AI: no NVIDIA GPU detected (/dev/nvidia0 missing)." >&2
+            echo "Filamind AI: this .spk is the GPU build, only the DVA 3221 ships an NVIDIA card." >&2
+            echo "Filamind AI: download the CPU build for your device (e.g. *-ds1821-plus.spk) from https://github.com/filamind-app/filamind-ai/releases" >&2
+            exit 1
+        fi
+        if [ ! -d "/var/packages/NVIDIARuntimeLibrary/target/cuda/lib64" ]; then
+            echo "Filamind AI: NVIDIARuntimeLibrary package not installed or incomplete." >&2
+            echo "Filamind AI: install NVIDIARuntimeLibrary from Package Center first, then retry." >&2
+            exit 1
+        fi
+        ;;
+    *)
+        # CPU build → just sanity-check that python3 is present
+        if ! command -v python3 >/dev/null 2>&1 \
+           && [ ! -x /usr/bin/python3 ] \
+           && [ ! -x /usr/local/bin/python3 ]; then
+            echo "Filamind AI: python3 not found. DSM 7.x normally ships Python 3.8+." >&2
+            exit 1
+        fi
+        ;;
+esac
 
 exit 0
