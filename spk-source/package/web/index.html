@@ -819,6 +819,7 @@ html[dir="rtl"] .user-menu-dropdown { right: auto; left: 0; }
             <button class="tab" data-tab="modes">Agents</button>
             <button class="tab" data-tab="connection">Connection</button>
             <button class="tab" data-tab="mcp">MCP</button>
+            <button class="tab" data-tab="about" data-i18n="about.tab">About</button>
         </div>
 
         <div class="tab-content active" data-tab-content="general">
@@ -1104,6 +1105,47 @@ html[dir="rtl"] .user-menu-dropdown { right: auto; left: 0; }
             <div class="field">
                 <label data-i18n="mcp.registered_servers">Registered MCP servers</label>
                 <div id="mcpServersList"><div class="hint" data-i18n="mcp.no_servers_yet">No MCP servers registered yet.</div></div>
+            </div>
+        </div>
+
+        <div class="tab-content" data-tab-content="about">
+            <div class="field">
+                <label data-i18n="about.installed_version">Installed version</label>
+                <div id="aboutVersionCard" class="card" style="background:var(--bg-elev); padding:14px 16px; margin-top:6px;">
+                    <div class="hint" data-i18n="about.loading">Loading…</div>
+                </div>
+            </div>
+
+            <div class="field">
+                <label data-i18n="about.update_check">Updates</label>
+                <div id="aboutUpdateCard" class="card" style="background:var(--bg-elev); padding:14px 16px; margin-top:6px;">
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <button class="btn btn-primary" id="btnCheckUpdate" data-i18n="about.check_now">Check for updates</button>
+                        <a id="aboutReleasesLink" class="btn" href="https://github.com/filamind-app/filamind-ai/releases" target="_blank" rel="noopener" data-i18n="about.all_releases">All releases on GitHub</a>
+                    </div>
+                    <div id="aboutUpdateResult" style="margin-top:12px;"></div>
+                    <div class="hint" style="margin-top:10px;" data-i18n="about.dsm_hint">For one-click updates from DSM Package Center, add the Filamind AI source URL under Package Center → Settings → Package Sources → Add → <code>https://filamind-app.github.io/filamind-ai/</code></div>
+                </div>
+            </div>
+
+            <div class="field">
+                <label data-i18n="about.changelog">Release history</label>
+                <div id="aboutChangelogCard" class="card" style="background:var(--bg-card); padding:14px 16px; margin-top:6px; max-height:520px; overflow-y:auto;">
+                    <div class="hint" data-i18n="about.loading">Loading…</div>
+                </div>
+            </div>
+
+            <div class="field">
+                <label data-i18n="about.links">Useful links</label>
+                <div class="card" style="background:var(--bg-elev); padding:14px 16px; margin-top:6px;">
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <a class="btn" href="https://github.com/filamind-app/filamind-ai" target="_blank" rel="noopener" data-i18n="about.source_code">📦 Source code</a>
+                        <a class="btn" href="https://github.com/filamind-app/filamind-ai/issues" target="_blank" rel="noopener" data-i18n="about.report_issue">🐛 Report an issue</a>
+                        <a class="btn" href="https://github.com/filamind-app/filamind-ai/blob/main/CHANGELOG.md" target="_blank" rel="noopener" data-i18n="about.full_changelog">📜 Full changelog</a>
+                        <a class="btn" href="https://github.com/filamind-app/filamind-ai/discussions" target="_blank" rel="noopener" data-i18n="about.discussions">💬 Discussions</a>
+                        <a class="btn" href="mailto:eg2@live.com" data-i18n="about.contact_maintainer">✉ Email maintainer</a>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -2434,9 +2476,96 @@ function openSettings() {
     $("#cfgUseStream").checked = !!s.useStream;
     renderAgentsTab();
     loadModelList();
+    renderAboutTab();
     els.settingsModal.classList.add("open");
 }
 function closeSettings() { els.settingsModal.classList.remove("open"); }
+
+// ─── About tab ────────────────────────────────────────────────────────────
+async function renderAboutTab() {
+    const versionCard   = document.getElementById("aboutVersionCard");
+    const changelogCard = document.getElementById("aboutChangelogCard");
+    const t = (k, fb) => (window.tStr && window.tStr(k)) || fb;
+
+    try {
+        const r = await fetch("/api/version");
+        const v = await r.json();
+        const rows = [
+            [t("about.row_version", "Version"),        `<b>${escapeHtml(v.package_version || v.daemon_version)}</b>`],
+            [t("about.row_displayname", "Display name"), escapeHtml(v.displayname || "")],
+            [t("about.row_engine", "Inference engine"), escapeHtml(v.engine || "")],
+            [t("about.row_model", "Device target"),    escapeHtml(v.model || "")],
+            [t("about.row_arch", "Architecture"),      escapeHtml(v.arch || "")],
+            [t("about.row_dsm", "DSM version"),        escapeHtml(v.dsm_version || "—")],
+            [t("about.row_build", "Built"),            escapeHtml(v.build_date || "—")],
+            [t("about.row_sha", "Git revision"),       v.git_sha ? `<a href="${escapeHtml(v.repo_url)}/commit/${escapeHtml(v.git_sha)}" target="_blank" rel="noopener"><code>${escapeHtml(v.git_sha)}</code></a> (${escapeHtml(v.git_branch || "main")})` : "—"],
+            [t("about.row_maintainer", "Maintainer"),  escapeHtml(v.maintainer || "")],
+        ];
+        versionCard.innerHTML = `<table style="border-collapse:collapse; width:100%; font-size:13px;">${
+            rows.map(([k, val]) => `<tr><td style="padding:4px 8px; color:var(--text-dim); width:140px; vertical-align:top;">${escapeHtml(k)}</td><td style="padding:4px 8px;">${val}</td></tr>`).join("")
+        }</table>`;
+    } catch (e) {
+        versionCard.innerHTML = `<div class="alert alert-error">${escapeHtml(String(e))}</div>`;
+    }
+
+    try {
+        const r = await fetch("/api/changelog");
+        const md = await r.text();
+        // Use the existing markdown renderer if available; fall back to <pre>.
+        if (typeof renderMarkdown === "function") {
+            changelogCard.innerHTML = renderMarkdown(md);
+        } else {
+            changelogCard.innerHTML = `<pre style="white-space:pre-wrap; margin:0; font-size:12px;">${escapeHtml(md)}</pre>`;
+        }
+    } catch (e) {
+        changelogCard.innerHTML = `<div class="alert alert-error">${escapeHtml(String(e))}</div>`;
+    }
+}
+
+async function checkForUpdate() {
+    const out = document.getElementById("aboutUpdateResult");
+    const btn = document.getElementById("btnCheckUpdate");
+    const t = (k, fb) => (window.tStr && window.tStr(k)) || fb;
+    const origLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = t("about.checking", "Checking…");
+    out.innerHTML = "";
+    try {
+        const r = await fetch("/api/check-update");
+        const j = await r.json();
+        if (j.error) {
+            out.innerHTML = `<div class="alert alert-error">${t("about.check_failed","Update check failed")}: ${escapeHtml(j.error)}</div>`;
+        } else if (j.update_available) {
+            const dl = j.spk_download ? `<a class="btn btn-primary" href="${escapeHtml(j.spk_download)}" target="_blank" rel="noopener">⬇ ${t("about.download_spk","Download SPK")}</a>` : "";
+            out.innerHTML = `
+                <div class="alert" style="background:rgba(22,163,74,.10); color:var(--ok); border:1px solid rgba(22,163,74,.25); padding:12px;">
+                    <div style="font-weight:600; margin-bottom:6px;">🎉 ${t("about.update_available","Update available")}: <code>${escapeHtml(j.current)}</code> → <code>${escapeHtml(j.latest)}</code></div>
+                    <div class="hint">${t("about.published","Published")}: ${escapeHtml((j.published_at || "").slice(0,10))}</div>
+                    <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+                        ${dl}
+                        <a class="btn" href="${escapeHtml(j.release_url)}" target="_blank" rel="noopener">📝 ${t("about.release_notes","Release notes")}</a>
+                    </div>
+                    <details style="margin-top:10px;">
+                        <summary style="cursor:pointer; font-size:13px;">${t("about.show_notes","Show release notes")}</summary>
+                        <pre style="white-space:pre-wrap; margin-top:8px; font-size:12px; line-height:1.5;">${escapeHtml(j.release_notes || "")}</pre>
+                    </details>
+                </div>`;
+        } else if (j.latest) {
+            out.innerHTML = `<div class="alert alert-info">✓ ${t("about.up_to_date","You're on the latest version")} (<code>${escapeHtml(j.current)}</code>).</div>`;
+        } else {
+            out.innerHTML = `<div class="alert alert-info">${t("about.no_release","No releases published yet.")}</div>`;
+        }
+    } catch (e) {
+        out.innerHTML = `<div class="alert alert-error">${escapeHtml(String(e))}</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = origLabel;
+    }
+}
+document.addEventListener("DOMContentLoaded", () => {
+    const b = document.getElementById("btnCheckUpdate");
+    if (b) b.addEventListener("click", checkForUpdate);
+});
 function saveSettings() {
     const s = STATE.settings;
     s.system  = $("#cfgSystem").value;

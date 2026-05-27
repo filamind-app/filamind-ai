@@ -17,6 +17,44 @@ Following [Keep a Changelog](https://keepachangelog.com/) — تصنيفات: **
 
 ---
 
+## [1.2.5] — 2026-05-27
+
+بنية الإصدارات + DSM Package Source + صفحة "حول التطبيق" داخل الـ UI · Release infrastructure + DSM Package Source + in-app About tab.
+
+### Added
+- **New Settings → About tab** showing everything a user needs to know about their install:
+  - Installed package version + DSM version + git revision + build date.
+  - Inference engine description (e.g. `llama.cpp b1620 + CUDA 10.1 (GPU)` on DVA 3221, `llama.cpp latest + CPU AVX2` on DS1821+).
+  - **"Check for updates"** button — calls GitHub Releases API, shows the latest version with release notes and a download link if an update is available.
+  - **Embedded release history** rendered from the packaged `CHANGELOG.md`.
+  - Quick-links: source code, issue tracker, full changelog, discussions, maintainer email.
+- **`/api/version`** endpoint enriched — returns `daemon_version`, `package_version`, `displayname`, `model`, `arch`, `dsm_version`, `engine`, `build_date`, `git_sha`, `git_branch`, `maintainer`, plus repo / release URLs.
+- **`/api/changelog`** endpoint — serves the bundled `CHANGELOG.md` (text/markdown). The build script now copies `CHANGELOG.md` into the package so the file is available offline at `/var/packages/FilamindAI/target/CHANGELOG.md`.
+- **`/api/check-update`** endpoint — hits `api.github.com/repos/filamind-app/filamind-ai/releases/latest`, compares to the running version, returns `{current, latest, update_available, release_url, release_notes, spk_download, published_at}`. Cached for 1 hour so a chatty UI doesn't spam GitHub.
+- **`docs/` folder** that GitHub Pages publishes at `https://filamind-app.github.io/filamind-ai/` — this URL is a valid **third-party DSM Package Source**. Users add it once to **Package Center → Settings → Package Sources** and DSM offers one-click updates from then on.
+- **`docs/_build_packages_json.py`** — generator that emits `packages.json` in the format DSM expects, with separate entries for `synology_denverton_dva3221` (DVA 3221) and `synology_v1000_1821+` (DS1821+).
+- **`.github/workflows/release.yml`** — triggered on `v*.*.*` tag pushes. Builds both device SPKs, computes SHA-256 sums, extracts the matching section from `CHANGELOG.md` as release notes, attaches everything to a GitHub Release, and re-publishes `packages.json` to Pages.
+- **`BUILD_INFO`** file emitted inside the package by `build_spk.sh` — captures `BUILD_DATE`, `GIT_SHA`, `GIT_BRANCH`, `DAEMON_VERSION` so the About tab can show provenance even on a freshly-installed SPK with no network access.
+- 28 new i18n keys under `about.*` translated into both English and Arabic (natural Arabic phrasing, e.g. "حول التطبيق" for tab title, "أنت على أحدث إصدار" for up-to-date state).
+
+### Changed
+- **`build_spk.sh`** now bundles `CHANGELOG.md` and writes `BUILD_INFO` automatically. No-op if `git` isn't available — `BUILD_INFO` still gets a `BUILD_DATE` line.
+- **CI `Build SPK` job** runs on pull requests too (artifact upload limited to push-to-main). Catches packaging regressions before merge.
+
+### How users discover updates from now on
+
+After installing this version (manually, once), three things change:
+
+1. **In-app banner / About tab** — opens `/api/check-update` on demand, surfaces a green "Update available" card with a one-click SPK download.
+2. **DSM Package Center** — if the user added `https://filamind-app.github.io/filamind-ai/` as a Package Source, DSM shows the package under **Community** with an Update button when a newer version is published.
+3. **GitHub Releases page** — every tag push produces a release with attached SPKs for every supported device + SHA256SUMS.
+
+### Migration / install notes
+- **Already on 1.2.4?** Settings → System → Restart, or wait for the next package upgrade. About tab works immediately.
+- **Fresh install + Package Source URL:** add the URL *before* installing if you want DSM to know about updates from day one.
+
+---
+
 ## [1.2.4] — 2026-05-27
 
 إعادة تسمية المشروع إلى **Filamind AI** + بنية ريبو GitHub + بدء دعم DS1821+ · Rebranded to **Filamind AI** + GitHub repo bootstrap + DS1821+ second-device support.

@@ -1,5 +1,5 @@
 package="FilamindAI"
-version="1.2.4-0029"
+version="1.2.5-0030"
 os_min_ver="7.2-64561"
 arch="x86_64"
 model="synology_denverton_dva3221"

@@ -11,6 +11,20 @@ echo "=== Building SPK in $WORK ==="
 cp -r $SRC/* $WORK/
 cd $WORK
 
+# Ship CHANGELOG.md inside the package so /api/changelog can serve it offline,
+# and write BUILD_INFO with the git SHA + date for /api/version.
+if [ -f "$(dirname $SRC)/CHANGELOG.md" ]; then
+    cp "$(dirname $SRC)/CHANGELOG.md" package/CHANGELOG.md
+fi
+{
+    echo "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    if command -v git >/dev/null 2>&1 && (cd "$(dirname $SRC)" && git rev-parse --short HEAD >/dev/null 2>&1); then
+        echo "GIT_SHA=$(cd "$(dirname $SRC)" && git rev-parse --short HEAD)"
+        echo "GIT_BRANCH=$(cd "$(dirname $SRC)" && git rev-parse --abbrev-ref HEAD)"
+    fi
+    echo "DAEMON_VERSION=$(grep -E '^DAEMON_VERSION' "$SRC/package/bin/control_daemon.py" | head -1 | sed 's/[^"]*"\(.*\)".*/\1/')"
+} > package/BUILD_INFO
+
 # Strip CR/BOM from text files (Windows -> Unix)
 for f in INFO scripts/* conf/* WIZARD_UIFILES/*; do
     if [ -f "$f" ]; then

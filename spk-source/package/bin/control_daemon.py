@@ -839,7 +839,161 @@ def _sanitize_v1_body(raw: bytes) -> bytes:
     return json.dumps(out, ensure_ascii=False).encode("utf-8")
 
 
-DAEMON_VERSION = "1.2.4"
+DAEMON_VERSION = "1.2.5"
+REPO_OWNER     = "filamind-app"
+REPO_NAME      = "filamind-ai"
+REPO_URL       = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
+RELEASES_API   = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
+RELEASES_URL   = f"{REPO_URL}/releases"
+CHANGELOG_RAW  = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/CHANGELOG.md"
+
+# Per-package on-disk paths for static metadata (set at build time)
+INFO_FILE      = "/var/packages/FilamindAI/INFO"        # available on running NAS
+CHANGELOG_FILE = INSTALL_DIR + "/CHANGELOG.md"          # shipped in package
+BUILD_INFO     = INSTALL_DIR + "/BUILD_INFO"            # optional: git sha + date
+
+# Cached results — refreshed once per hour to avoid hammering GitHub.
+_UPDATE_CACHE = {"checked_at": 0, "data": None}
+_UPDATE_CACHE_TTL = 3600   # seconds
+
+
+# ───── Release / version helpers ────────────────────────────────────────────
+def _read_text(path, default=""):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return default
+
+
+def _parse_info_field(content, key):
+    """Pull a `key="value"` line out of the SPK INFO file."""
+    import re
+    m = re.search(r'^' + re.escape(key) + r'="([^"]*)"', content, re.M)
+    return m.group(1) if m else None
+
+
+def _read_build_info():
+    """Optional BUILD_INFO file written at SPK build time. Format: KEY=VALUE per line."""
+    info = {}
+    raw = _read_text(BUILD_INFO)
+    for line in raw.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            info[k.strip()] = v.strip()
+    return info
+
+
+def _semver_compare(a, b):
+    """Return -1/0/1 comparing two version strings like 1.2.5 vs 1.2.4-0029.
+    Tolerant: strips leading 'v', splits on dashes, compares numeric parts."""
+    def normalize(s):
+        s = (s or "").lstrip("v").strip()
+        s = s.split("-")[0]   # drop -0029 build suffix
+        parts = []
+        for p in s.split("."):
+            try: parts.append(int(p))
+            except ValueError: parts.append(0)
+        while len(parts) < 3: parts.append(0)
+        return parts[:3]
+    na, nb = normalize(a), normalize(b)
+    return (na > nb) - (na < nb)
+
+
+def _get_version_info():
+    """Rich version + build + device info served by /api/version."""
+    info_content = _read_text(INFO_FILE)
+    build = _read_build_info()
+    dsm_version = ""
+    try:
+        # /etc.defaults/synoinfo.conf is shipped by DSM; harmless on dev hosts.
+        synoinfo = _read_text("/etc.defaults/synoinfo.conf")
+        import re
+        m = re.search(r'^productversion="([^"]+)"', synoinfo, re.M)
+        if m: dsm_version = m.group(1)
+        m = re.search(r'^buildnumber="([^"]+)"', synoinfo, re.M)
+        if m: dsm_version += f"-{m.group(1)}"
+    except Exception:
+        pass
+
+    # GPU detection (best-effort)
+    engine = "llama.cpp (cpu)"
+    try:
+        if os.path.exists("/dev/nvidia0"):
+            engine = "llama.cpp b1620 + CUDA 10.1 (GPU)"
+        else:
+            # Detect AVX2 vs SSE-only for the CPU build description
+            cpu = _read_text("/proc/cpuinfo")
+            if "avx2" in cpu:
+                engine = "llama.cpp latest + CPU AVX2"
+    except Exception:
+        pass
+
+    return {
+        "daemon_version":  DAEMON_VERSION,
+        "package_name":    _parse_info_field(info_content, "package") or "FilamindAI",
+        "package_version": _parse_info_field(info_content, "version") or DAEMON_VERSION,
+        "displayname":     _parse_info_field(info_content, "displayname") or "Filamind AI",
+        "model":           _parse_info_field(info_content, "model") or "",
+        "arch":            _parse_info_field(info_content, "arch") or "",
+        "maintainer":      _parse_info_field(info_content, "maintainer") or "Abdelmonem Awad",
+        "dsm_version":     dsm_version,
+        "engine":          engine,
+        "build_date":      build.get("BUILD_DATE", ""),
+        "git_sha":         build.get("GIT_SHA", ""),
+        "git_branch":      build.get("GIT_BRANCH", ""),
+        "repo_url":        REPO_URL,
+        "releases_url":    RELEASES_URL,
+        "changelog_url":   f"{REPO_URL}/blob/main/CHANGELOG.md",
+    }
+
+
+def _check_for_update():
+    """Hit GitHub Releases API (cached) and return update status."""
+    import time, urllib.request
+    now = time.time()
+    if _UPDATE_CACHE["data"] and (now - _UPDATE_CACHE["checked_at"]) < _UPDATE_CACHE_TTL:
+        return _UPDATE_CACHE["data"]
+
+    out = {
+        "current":          DAEMON_VERSION,
+        "latest":           None,
+        "update_available": False,
+        "release_url":      None,
+        "release_name":     None,
+        "release_notes":    None,
+        "published_at":     None,
+        "spk_download":     None,
+        "error":            None,
+        "checked_at":       int(now),
+    }
+    try:
+        req = urllib.request.Request(
+            RELEASES_API,
+            headers={"Accept": "application/vnd.github+json",
+                     "User-Agent": f"FilamindAI/{DAEMON_VERSION}"},
+        )
+        with urllib.request.urlopen(req, timeout=6) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        latest = data.get("tag_name", "")
+        out["latest"]         = latest
+        out["release_url"]    = data.get("html_url")
+        out["release_name"]   = data.get("name") or latest
+        out["release_notes"]  = data.get("body") or ""
+        out["published_at"]   = data.get("published_at")
+        # First .spk asset wins
+        for a in data.get("assets", []):
+            if a.get("name", "").endswith(".spk"):
+                out["spk_download"] = a.get("browser_download_url")
+                break
+        if latest and _semver_compare(latest, DAEMON_VERSION) > 0:
+            out["update_available"] = True
+    except Exception as e:
+        out["error"] = str(e)[:200]
+
+    _UPDATE_CACHE["data"] = out
+    _UPDATE_CACHE["checked_at"] = now
+    return out
 
 
 def _is_safe_model_path(path):
@@ -1533,7 +1687,16 @@ class Handler(BaseHTTPRequestHandler):
                 "daemon_version": DAEMON_VERSION,
             })
         if path == "/api/version":
-            return self._send_json(200, {"daemon_version": DAEMON_VERSION})
+            return self._send_json(200, _get_version_info())
+        if path == "/api/changelog":
+            # Serve the shipped CHANGELOG.md as text. Falls back to GitHub raw URL note.
+            md = _read_text(CHANGELOG_FILE)
+            if not md:
+                md = (f"# Filamind AI\n\nFull changelog: {REPO_URL}/blob/main/CHANGELOG.md\n"
+                      f"(Local copy not bundled in this build.)\n")
+            return self._send_text(200, md, "text/markdown; charset=utf-8")
+        if path == "/api/check-update":
+            return self._send_json(200, _check_for_update())
         if path == "/api/diagnose":
             u = self._require_user("admin")
             if not u: return
