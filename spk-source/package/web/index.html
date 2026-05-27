@@ -31,6 +31,7 @@
 :root {
     --bg: #faf9f6;
     --bg-elev: #f5f3ec;
+    --bg-card: #ffffff;
     --bg-sidebar: #f0eee6;
     --bg-input: #ffffff;
     --text: #1a1814;
@@ -47,12 +48,16 @@
     --danger: #c93030;
     --warn: #d97706;
     --ok: #16a34a;
-    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.04);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.04);
+    --shadow:    0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.05);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,.08), 0 24px 64px -16px rgba(0,0,0,.20);
     --radius: 10px;
+    --ring: 0 0 0 3px rgba(201, 100, 66, .22);
 }
 [data-theme="dark"] {
     --bg: #1f1e1c;
-    --bg-elev: #28272500;
+    --bg-elev: #2a2926;
+    --bg-card: #28272a;
     --bg-sidebar: #181715;
     --bg-input: #2a2926;
     --text: #ece9e0;
@@ -66,19 +71,48 @@
     --user-bg: #2c2a26;
     --code-bg: #15140f;
     --code-text: #e8e4d8;
-    --shadow: 0 1px 2px rgba(0,0,0,.2), 0 2px 8px rgba(0,0,0,.3);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.25);
+    --shadow:    0 1px 2px rgba(0,0,0,.25), 0 4px 12px rgba(0,0,0,.3);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,.4), 0 24px 64px -16px rgba(0,0,0,.5);
+    --ring: 0 0 0 3px rgba(215, 118, 88, .32);
 }
+:root[data-theme="dark"] .modal-head .icon-btn { background: transparent; }
+
 * { box-sizing: border-box; }
 html, body {
     margin: 0; padding: 0;
     height: 100vh; width: 100vw;
     overflow: hidden;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "Noto Sans Arabic", sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Helvetica Neue", Helvetica, Arial, "Noto Sans Arabic", system-ui, sans-serif;
     background: var(--bg);
     color: var(--text);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -.005em;
+    line-height: 1.55;
 }
+
+/* Focus rings — visible only for keyboard navigation */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.tab:focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+}
+
+/* Polished scrollbars */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border: 2px solid var(--bg);
+    border-radius: 999px;
+    transition: background 160ms ease;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 body { display: flex; }
 
 /* ============ Sidebar ============ */
@@ -496,53 +530,169 @@ html[dir="rtl"] .msg-content table td { text-align: right; }
 .input-foot { text-align: center; font-size: 11px; color: var(--text-faint); margin-top: 8px; }
 
 /* ============ Modal ============ */
+/* ═══════ Modal (Settings) — sidebar layout, refined v1.3.1 ═══════ */
 .modal-backdrop {
     display: none;
     position: fixed; inset: 0;
-    background: rgba(0,0,0,.4);
+    background: rgba(20, 18, 14, .55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     align-items: center; justify-content: center;
     z-index: 100;
+    opacity: 0;
+    transition: opacity 180ms ease;
 }
-.modal-backdrop.open { display: flex; }
+.modal-backdrop.open {
+    display: flex;
+    opacity: 1;
+}
 .modal {
-    background: var(--bg);
+    background: var(--bg-card);
     color: var(--text);
-    border-radius: 14px;
-    width: min(640px, 92vw);
-    max-height: 90vh;
-    overflow-y: auto;
-    box-shadow: 0 10px 40px rgba(0,0,0,.3);
+    border-radius: 16px;
+    width: min(1024px, 94vw);
+    height: min(720px, 90vh);
+    box-shadow:
+        0 24px 64px -16px rgba(0,0,0,.40),
+        0 2px 8px rgba(0,0,0,.08);
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    grid-template-columns: 232px 1fr;
+    grid-template-areas:
+        "head head"
+        "side body"
+        "side foot";
+    overflow: hidden;
+    transform: translateY(8px) scale(.98);
+    opacity: 0;
+    transition: transform 220ms cubic-bezier(.16,1,.3,1), opacity 180ms ease;
 }
+.modal-backdrop.open .modal { transform: translateY(0) scale(1); opacity: 1; }
+
 .modal-head {
-    padding: 16px 20px;
+    grid-area: head;
+    padding: 18px 24px;
     border-bottom: 1px solid var(--border);
     display: flex; align-items: center; justify-content: space-between;
-    position: sticky; top: 0;
-    background: var(--bg); z-index: 2;
+    background: var(--bg-card);
 }
-.modal-head h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.modal-head h2 {
+    margin: 0; font-size: 17px; font-weight: 600;
+    letter-spacing: -.01em;
+}
+.modal-head .icon-btn {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background 140ms ease;
+}
+.modal-head .icon-btn:hover { background: var(--bg-elev); }
+
+/* Sidebar tab nav */
 .tabs {
-    display: flex; gap: 4px;
-    padding: 0 20px;
-    border-bottom: 1px solid var(--border);
-    position: sticky; top: 56px; background: var(--bg); z-index: 1;
+    grid-area: side;
+    padding: 16px 12px;
+    border-right: 1px solid var(--border);
+    background: var(--bg-elev);
+    display: flex; flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
 }
 .tab {
-    padding: 10px 14px;
-    background: transparent; border: 0; border-bottom: 2px solid transparent;
+    width: 100%;
+    text-align: start;
+    padding: 9px 14px;
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
     cursor: pointer;
     color: var(--text-dim);
     font-size: 14px; font-weight: 500;
+    transition: all 140ms ease;
+    display: flex; align-items: center; gap: 10px;
+    position: relative;
 }
-.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-.tab-content { display: none; padding: 16px 20px; }
+.tab::before {
+    content: ""; font-size: 15px; line-height: 1;
+}
+.tab[data-tab="general"]::before    { content: "⚙"; }
+.tab[data-tab="sampling"]::before   { content: "🎛"; }
+.tab[data-tab="providers"]::before  { content: "🔑"; }
+.tab[data-tab="resources"]::before  { content: "📊"; }
+.tab[data-tab="models"]::before     { content: "🧠"; }
+.tab[data-tab="system"]::before     { content: "🖥"; }
+.tab[data-tab="modes"]::before      { content: "🤖"; }
+.tab[data-tab="connection"]::before { content: "🔌"; }
+.tab[data-tab="mcp"]::before        { content: "🛠"; }
+.tab[data-tab="about"]::before      { content: "ⓘ"; }
+
+.tab:hover { background: var(--bg); color: var(--text); }
+.tab.active {
+    background: var(--accent-faint);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* Tab content area */
+.tab-content {
+    grid-area: body;
+    display: none;
+    padding: 24px 28px;
+    overflow-y: auto;
+    animation: tabFade 200ms ease;
+}
 .tab-content.active { display: block; }
+@keyframes tabFade {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
 .modal-foot {
-    padding: 12px 20px;
+    grid-area: foot;
+    padding: 14px 24px;
     border-top: 1px solid var(--border);
-    display: flex; gap: 8px; justify-content: flex-end;
-    position: sticky; bottom: 0;
-    background: var(--bg);
+    display: flex; gap: 10px; justify-content: flex-end;
+    background: var(--bg-card);
+}
+
+/* Compact / mobile: collapse to single column with horizontal scroll-tabs */
+@media (max-width: 760px) {
+    .modal {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto 1fr auto;
+        grid-template-areas:
+            "head"
+            "side"
+            "body"
+            "foot";
+        height: 100vh; width: 100vw; max-height: 100vh;
+        border-radius: 0;
+    }
+    .tabs {
+        flex-direction: row;
+        padding: 8px 12px;
+        border-right: 0; border-bottom: 1px solid var(--border);
+        overflow-x: auto; overflow-y: hidden;
+        gap: 4px;
+        scroll-behavior: smooth;
+    }
+    .tab {
+        flex: 0 0 auto;
+        padding: 8px 14px;
+    }
+    .tab-content { padding: 18px 18px 24px; }
+}
+
+/* RTL flip for sidebar border */
+html[dir="rtl"] .tabs {
+    border-right: 0;
+    border-left: 1px solid var(--border);
+}
+html[dir="rtl"] .tab {
+    text-align: start;
+}
+@media (max-width: 760px) {
+    html[dir="rtl"] .tabs { border-left: 0; border-bottom: 1px solid var(--border); }
 }
 .btn {
     padding: 8px 16px;
@@ -2203,10 +2353,22 @@ function openToolsMenu() {
     });
 }
 function openFilesMenu() {
-    alert((tStr("toolbar.files_soon") || "File attachments are coming in v1.3 (RAG per agent — upload PDFs / TXT / MD). For now, paste text directly into the message."));
+    // v1.3+: route through Settings modal where the upload + per-agent file
+    // list lives. Until that ships, the MCP tab covers the same conceptual
+    // space (tools attached to an agent).
+    openSettingsTab("mcp");
 }
 function openMcpMenu() {
-    alert((tStr("toolbar.mcp_soon") || "MCP (Model Context Protocol) integration is on the roadmap for v1.3. It will let agents call external tools, file systems, and APIs via the standard MCP spec. See Settings → MCP for the upcoming config."));
+    // Open Settings → MCP. The runtime (v1.3.0) ships 8 working tool servers
+    // exposed there — this used to be a "coming soon" alert.
+    openSettingsTab("mcp");
+}
+function openSettingsTab(tabId) {
+    openSettings();
+    // Switch to the requested tab (the click handler installed at boot
+    // does the swap; we synthesize a click here so behavior stays in one place).
+    const target = document.querySelector(`.tab[data-tab="${tabId}"]`);
+    if (target) target.click();
 }
 function showSimpleMenu(items, onPick) {
     // Lightweight inline modal

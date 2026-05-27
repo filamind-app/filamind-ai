@@ -17,6 +17,31 @@ Following [Keep a Changelog](https://keepachangelog.com/) — تصنيفات: **
 
 ---
 
+## [1.3.1] — 2026-05-27
+
+تلميع UX: ربط زر MCP + إعادة تخطيط نافذة الإعدادات + تصميم عصري · UX polish: MCP button wired + redesigned Settings modal + modern visual pass.
+
+### Fixed
+- **Chat-toolbar MCP button was a dead end.** It still showed the v1.2.0 "coming soon" alert even after the runtime + 8 tool servers shipped in v1.3.0. Click now opens **Settings → MCP** directly so users can immediately enable/disable servers and trigger them via "Run". Same fix applied to the Files button (routes to MCP tab for now until v1.4 ships per-agent file uploads).
+
+### Changed
+- **Settings modal completely re-laid-out.** Replaces the cramped 640px-wide modal with a roomy 1024 × 720px panel and a **vertical sidebar nav** instead of an overflowing horizontal tab strip. Tabs are now icon-led (⚙ General, 🎛 Sampling, 🔑 Providers, 📊 Resources, 🧠 Models, 🖥 System, 🤖 Agents, 🔌 Connection, 🛠 MCP, ⓘ About) and stay anchored on the left as content scrolls. On screens narrower than 760 px it collapses to a single column with a horizontal scroll-tab strip — full-screen on phones.
+- **Open/close animation** — backdrop fades in, modal slides up + scales (220 ms cubic-bezier easing). Switching tabs fades the content in (no more abrupt swap).
+- **Frosted backdrop** — `backdrop-filter: blur(6px)` softens the chat behind the modal.
+
+### Improved (modern visual pass)
+- **Typography:** added Inter to the font stack ahead of system fallbacks, tightened letter-spacing to `-.005em`, set base line-height to 1.55, headings to `-.01em` for that contemporary tight look.
+- **Shadow scale:** three tiers — `--shadow-sm` for inputs/borders, `--shadow` for cards/dropdowns, `--shadow-lg` for the modal itself. Replaces the single flat shadow.
+- **Focus rings:** real keyboard-accessible focus ring (`var(--ring)`) on every interactive element via `:focus-visible`. Click users see no ring change; tabbed users get a clear 3px accent halo.
+- **Scrollbars** styled with a thin accent-on-hover scheme; works on Chromium/WebKit and Firefox.
+- **Dark mode bug fix:** `--bg-elev` in dark theme was `#28272500` (8-digit hex with `00` alpha = fully transparent), causing elevated surfaces to vanish. Corrected to `#2a2926`.
+- **Tab states:** active tab now uses `--accent-faint` background instead of a thin border — clearer at a glance, especially in dark mode.
+
+### i18n
+- No new strings (tab names use existing keys + emoji prefixes set via CSS `::before`, so RTL flips correctly without touching JSON).
+
+---
+
 ## [1.3.0] — 2026-05-27
 
 **MCP — Model Context Protocol runtime + 8 Tier-A tool servers** · أول إصدار يمنح المساعد القدرة على استدعاء أدوات حقيقية أثناء المحادثة.
