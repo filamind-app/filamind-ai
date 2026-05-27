@@ -35,20 +35,54 @@ jobs:
           echo "sha=$SHA"         >> "$GITHUB_OUTPUT"
           echo "Building Release $TAG (sha $SHA)"
 
+      # ─── Pre-flight: ensure device branches are caught up to main ─────
+      # Device branches must be fast-forward-only from main + their own overlay
+      # commits (binaries, INFO variant). If main has moved on without a merge,
+      # FAIL THE BUILD — better than shipping an SPK labeled vX with code from
+      # vX-N inside. (This caught a real bug where Filamind-1.3.0-dva3221.spk
+      # actually contained v1.2.4 code in production.)
+      - name: Verify device branches contain main's history
+        run: |
+          git fetch origin device/dva3221:device/dva3221 device/ds1821-plus:device/ds1821-plus
+          for branch in device/dva3221 device/ds1821-plus; do
+            if ! git merge-base --is-ancestor main "$branch"; then
+              echo "::error::$branch does not contain main's tip — refusing to build."
+              echo "         Run: git checkout $branch && git merge main && git push"
+              exit 1
+            fi
+          done
+          # Also verify the INFO version on each branch matches the tag we're releasing.
+          for branch in device/dva3221 device/ds1821-plus; do
+            v=$(git show "$branch:spk-source/INFO" | sed -n 's/^version="\([0-9.]*\)-.*"/\1/p')
+            if [ "$v" != "${{ steps.meta.outputs.version }}" ]; then
+              echo "::error::$branch INFO version is '$v' but tag is '${{ steps.meta.outputs.version }}'"
+              exit 1
+            fi
+          done
+
       - name: Build DVA 3221 SPK (CUDA GPU)
         run: |
-          git fetch origin device/dva3221:device/dva3221
           git checkout device/dva3221
           # On dva3221 branch the compiled llama-server / llama-main are tracked.
-          # Patch the build script for the CI runner's paths.
           sed -i "s|/mnt/c/Users/Eg2/Desktop/saynolgy|$PWD|g" build_spk.sh
           bash build_spk.sh
           mkdir -p _artifacts
           mv Filamind.spk "_artifacts/Filamind-${{ steps.meta.outputs.version }}-dva3221.spk"
+          # Post-build proof — re-extract and re-check the version embedded in the SPK
+          mkdir -p _verify
+          tar xf "_artifacts/Filamind-${{ steps.meta.outputs.version }}-dva3221.spk" -C _verify
+          v=$(grep '^version' _verify/INFO | sed 's/.*"\(.*\)".*/\1/')
+          tarv=$(tar xzOf _verify/package.tgz bin/control_daemon.py 2>/dev/null | grep '^DAEMON_VERSION' | sed 's/.*"\(.*\)".*/\1/')
+          echo "DVA3221 SPK INFO version: $v   DAEMON_VERSION: $tarv"
+          if [ "$tarv" != "${{ steps.meta.outputs.version }}" ]; then
+            echo "::error::DVA3221 SPK was built but DAEMON_VERSION inside is '$tarv', expected '${{ steps.meta.outputs.version }}'"
+            exit 1
+          fi
+          rm -rf _verify
           ls -lh _artifacts/
 
       - name: Build DS1821+ SPK (CPU AVX2) — best effort
-        continue-on-error: true     # build script may not be wired up yet
+        continue-on-error: true     # CPU build script may not have produced a real binary yet
         run: |
           git checkout device/ds1821-plus
           # Stub binary if the CPU build script hasn't produced one yet.
