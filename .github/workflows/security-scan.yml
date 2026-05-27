@@ -1,0 +1,96 @@
+name: Security scan
+
+on:
+  push:
+    branches: [main, "device/*"]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run every Monday at 03:00 UTC so dependency drift gets caught even on quiet weeks.
+    - cron: "0 3 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: read
+
+jobs:
+  # ─── Secret scanning (gitleaks) ────────────────────────────────────────
+  gitleaks:
+    name: gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─── Static analysis (CodeQL for Python + JavaScript) ──────────────────
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  # ─── JSON / shell / Python syntax sanity ───────────────────────────────
+  syntax:
+    name: Syntax sanity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: JSON validity (i18n + manifest + ui/config)
+        run: |
+          for f in $(git ls-files '*.json' 'spk-source/package/ui/config'); do
+            echo "Checking $f..."
+            python3 -c "import json; json.load(open('$f'))"
+          done
+      - name: Python compile
+        run: |
+          for f in $(git ls-files '*.py'); do
+            python3 -m py_compile "$f"
+          done
+      - name: Shell syntax (bash -n)
+        run: |
+          for f in $(git ls-files '*.sh'); do
+            bash -n "$f" || { echo "Bad: $f"; exit 1; }
+          done
+      - name: shellcheck (informational, doesn't fail build)
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y shellcheck
+          shellcheck -S warning $(git ls-files '*.sh') || true
+
+  # ─── Build SPK to catch packaging regressions ──────────────────────────
+  build-spk:
+    name: Build SPK
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run build_spk.sh (without llama-server binary — main branch only)
+        run: |
+          # main lacks the device-specific binary; the build script tolerates this
+          # for the structural sanity check below.
+          mkdir -p spk-source/package/bin
+          [ -f spk-source/package/bin/llama-server ] || echo "stub" > spk-source/package/bin/llama-server
+          [ -f spk-source/package/bin/llama-main   ] || echo "stub" > spk-source/package/bin/llama-main
+          # Patch the build script for the CI runner's paths.
+          sed -i "s|/mnt/c/Users/Eg2/Desktop/saynolgy|$PWD|g" build_spk.sh
+          bash build_spk.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spk-debug-build
+          path: Filamind.spk
+          retention-days: 7
