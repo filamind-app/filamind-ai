@@ -73,23 +73,27 @@ jobs:
           shellcheck -S warning $(git ls-files '*.sh') || true
 
   # ─── Build SPK to catch packaging regressions ──────────────────────────
+  # Runs on every push AND every pull_request so packaging breakage is caught
+  # before merge. Artifact is only kept for pushes to main (PR artifacts add
+  # noise and rarely get downloaded).
   build-spk:
     name: Build SPK
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
-      - name: Run build_spk.sh (without llama-server binary — main branch only)
+      - name: Run build_spk.sh (stubbing device-specific binaries)
         run: |
-          # main lacks the device-specific binary; the build script tolerates this
-          # for the structural sanity check below.
+          # main lacks the device-specific binaries; the build script tolerates
+          # stubs for the structural / packaging sanity check below.
           mkdir -p spk-source/package/bin
           [ -f spk-source/package/bin/llama-server ] || echo "stub" > spk-source/package/bin/llama-server
           [ -f spk-source/package/bin/llama-main   ] || echo "stub" > spk-source/package/bin/llama-main
           # Patch the build script for the CI runner's paths.
           sed -i "s|/mnt/c/Users/Eg2/Desktop/saynolgy|$PWD|g" build_spk.sh
           bash build_spk.sh
-      - uses: actions/upload-artifact@v7
+      - name: Upload SPK artifact (push to main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
         with:
           name: spk-debug-build
           path: Filamind.spk
