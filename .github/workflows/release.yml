@@ -43,10 +43,15 @@ jobs:
       # actually contained v1.2.4 code in production.)
       - name: Verify device branches contain main's history
         run: |
-          git fetch origin device/dva3221:device/dva3221 device/ds1821-plus:device/ds1821-plus
+          # actions/checkout for a tag puts us in detached-HEAD mode, so a
+          # local "main" branch doesn't exist. Use origin/main and fetch
+          # device branches into local refs we can address.
+          git fetch origin main:main device/dva3221:device/dva3221 device/ds1821-plus:device/ds1821-plus
+          MAIN_TIP=$(git rev-parse main)
+          echo "main tip = $MAIN_TIP"
           for branch in device/dva3221 device/ds1821-plus; do
-            if ! git merge-base --is-ancestor main "$branch"; then
-              echo "::error::$branch does not contain main's tip — refusing to build."
+            if ! git merge-base --is-ancestor "$MAIN_TIP" "$branch"; then
+              echo "::error::$branch does not contain main's tip ($MAIN_TIP) — refusing to build."
               echo "         Run: git checkout $branch && git merge main && git push"
               exit 1
             fi
