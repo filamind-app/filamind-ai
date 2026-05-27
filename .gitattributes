@@ -1,0 +1,42 @@
+# Default: Git decides line endings on checkin (LF in repo, native on checkout)
+* text=auto
+
+# Shell scripts MUST be LF — DSM/Synology shell can't parse CRLF
+*.sh        text eol=lf
+*.py        text eol=lf
+INFO        text eol=lf
+LICENSE     text eol=lf
+LICENSE_enu text eol=lf
+privilege   text eol=lf
+config      text eol=lf
+config.yml  text eol=lf
+postinst    text eol=lf
+preinst     text eol=lf
+postuninst  text eol=lf
+preuninst   text eol=lf
+postupgrade text eol=lf
+preupgrade  text eol=lf
+start-stop-status text eol=lf
+
+# JSON/YAML/MD — LF for cross-platform consistency
+*.json      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.md        text eol=lf
+*.cmake     text eol=lf
+
+# Web sources — LF
+*.html      text eol=lf
+*.css       text eol=lf
+*.js        text eol=lf
+
+# Binary blobs
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.gguf      binary
+*.bin       binary
+*.spk       binary
+llama-server-* binary

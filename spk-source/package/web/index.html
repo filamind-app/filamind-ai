@@ -1,0 +1,2824 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#c96442">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" sizes="64x64" href="/images/FilamindAI-64.png">
+<title>Filamind AI</title>
+<script>
+  // Auth guard before anything else paints
+  (async function () {
+    try {
+      const r = await fetch("/api/auth/status");
+      const j = await r.json();
+      if (!j.has_admin) { location.href = "/setup.html"; return; }
+      if (!j.authenticated) { location.href = "/login.html"; return; }
+      window.__ME = j.user;
+      window.__DAEMON_VERSION = j.daemon_version || "unknown";
+      const t = (j.user.theme || localStorage.getItem("filamindai_theme") || "light");
+      document.documentElement.setAttribute("data-theme", t);
+      localStorage.setItem("filamindai_theme", t);
+      const lang = (j.user.language || localStorage.getItem("filamindai_lang") || "en");
+      localStorage.setItem("filamindai_lang", lang);
+      document.documentElement.lang = lang;
+      document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+    } catch (e) { /* daemon may still be starting; let the page load anyway */ }
+  })();
+</script>
+<style>
+:root {
+    --bg: #faf9f6;
+    --bg-elev: #f5f3ec;
+    --bg-sidebar: #f0eee6;
+    --bg-input: #ffffff;
+    --text: #1a1814;
+    --text-dim: #5d564b;
+    --text-faint: #8a8478;
+    --border: #e6e1d3;
+    --border-strong: #d4cdb9;
+    --accent: #c96442;
+    --accent-hover: #b85a3a;
+    --accent-faint: #faeae2;
+    --user-bg: #f0eee6;
+    --code-bg: #2d2a25;
+    --code-text: #e8e4d8;
+    --danger: #c93030;
+    --warn: #d97706;
+    --ok: #16a34a;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.04);
+    --radius: 10px;
+}
+[data-theme="dark"] {
+    --bg: #1f1e1c;
+    --bg-elev: #28272500;
+    --bg-sidebar: #181715;
+    --bg-input: #2a2926;
+    --text: #ece9e0;
+    --text-dim: #b0aa9c;
+    --text-faint: #807b6e;
+    --border: #36332c;
+    --border-strong: #4a463e;
+    --accent: #d77658;
+    --accent-hover: #e88a6e;
+    --accent-faint: #3a2620;
+    --user-bg: #2c2a26;
+    --code-bg: #15140f;
+    --code-text: #e8e4d8;
+    --shadow: 0 1px 2px rgba(0,0,0,.2), 0 2px 8px rgba(0,0,0,.3);
+}
+* { box-sizing: border-box; }
+html, body {
+    margin: 0; padding: 0;
+    height: 100vh; width: 100vw;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "Noto Sans Arabic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+body { display: flex; }
+
+/* ============ Sidebar ============ */
+.sidebar {
+    width: 270px;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    flex-shrink: 0;
+    transition: margin-left .25s ease;
+}
+.sidebar.hidden { margin-left: -270px; }
+.sidebar-header {
+    padding: 14px 14px 10px;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--border);
+}
+.brand {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 15px;
+    color: var(--text);
+}
+.brand-mark {
+    width: 26px; height: 26px;
+    border-radius: 7px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 14px; font-weight: 700;
+}
+.new-chat {
+    margin: 10px;
+    padding: 10px 12px;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 14px; font-weight: 500;
+    display: flex; align-items: center; gap: 8px;
+    transition: background .15s;
+}
+.new-chat:hover { background: var(--bg-elev); }
+.modes {
+    padding: 0 10px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.mode-btn {
+    padding: 8px 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    transition: all .15s;
+}
+.mode-btn:hover { background: var(--bg-elev); color: var(--text); }
+.mode-btn.active { background: var(--accent-faint); color: var(--accent); border-color: var(--accent); }
+.mode-btn .icon { font-size: 16px; line-height: 1; }
+.conv-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 8px 8px;
+}
+.conv-section-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    padding: 10px 8px 6px;
+    font-weight: 600;
+    letter-spacing: .04em;
+}
+.conv-item {
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13.5px;
+    color: var(--text-dim);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: flex; align-items: center;
+    transition: background .12s;
+}
+.conv-item:hover { background: var(--bg-elev); color: var(--text); }
+.conv-item.active { background: var(--bg-elev); color: var(--text); font-weight: 500; }
+.conv-item-title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.conv-item-del {
+    opacity: 0;
+    background: none; border: 0;
+    cursor: pointer;
+    color: var(--text-faint);
+    padding: 2px 4px;
+    font-size: 16px;
+    line-height: 1;
+}
+.conv-item:hover .conv-item-del { opacity: 1; }
+.conv-item-del:hover { color: var(--danger); }
+.sidebar-footer {
+    border-top: 1px solid var(--border);
+    padding: 8px;
+    display: flex; gap: 6px;
+}
+.sidebar-footer button {
+    flex: 1;
+    background: transparent; border: 0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 13px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    transition: background .12s, color .12s;
+}
+.sidebar-footer button:hover { background: var(--bg-elev); color: var(--text); }
+
+/* ============ Main ============ */
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100vh; }
+.topbar {
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg);
+    z-index: 5;
+}
+.topbar-toggle {
+    background: transparent; border: 0;
+    padding: 6px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-dim);
+}
+.topbar-toggle:hover { background: var(--bg-elev); color: var(--text); }
+.model-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 13px;
+    color: var(--text);
+}
+.model-pill .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 0 3px rgba(34,197,94,.15);
+}
+.model-pill .dot.off { background: var(--danger); box-shadow: 0 0 0 3px rgba(239,68,68,.15); }
+.model-pill .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(245,158,11,.15); }
+.mode-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 10px;
+    background: var(--accent-faint);
+    color: var(--accent);
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+}
+.topbar .spacer { flex: 1; }
+.icon-btn {
+    background: transparent; border: 0;
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-dim);
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .12s, color .12s;
+}
+.icon-btn:hover { background: var(--bg-elev); color: var(--text); }
+
+/* ============ Messages ============ */
+.messages { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
+.messages-inner {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 24px 24px 12px;
+}
+.welcome {
+    text-align: center;
+    padding: 60px 20px 30px;
+    color: var(--text-dim);
+}
+.welcome h1 {
+    margin: 0 0 8px;
+    font-size: 28px; font-weight: 500;
+    color: var(--text);
+}
+.welcome .mode-label {
+    display: inline-block;
+    padding: 4px 12px;
+    background: var(--accent-faint);
+    color: var(--accent);
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 16px;
+}
+.welcome p { font-size: 15px; margin: 0; }
+.suggestions {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-top: 32px;
+    max-width: 600px;
+    margin-left: auto; margin-right: auto;
+}
+.suggestion {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    padding: 14px 16px;
+    border-radius: 10px;
+    text-align: left;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text);
+    transition: all .15s;
+}
+.suggestion:hover { border-color: var(--border-strong); background: var(--bg-elev); }
+
+.msg {
+    margin-bottom: 22px;
+    display: flex; gap: 12px;
+    line-height: 1.65;
+    font-size: 15.5px;
+}
+.msg-avatar {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+.msg.user .msg-avatar { background: var(--user-bg); color: var(--text-dim); }
+.msg.assistant .msg-avatar {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+}
+.msg-body { flex: 1; min-width: 0; }
+.msg-author { font-size: 13px; color: var(--text-faint); font-weight: 600; margin-bottom: 4px; }
+.msg-content { word-wrap: break-word; overflow-wrap: break-word; }
+.msg-content p { margin: 0 0 12px; }
+.msg-content p:last-child { margin-bottom: 0; }
+.msg-content code {
+    background: var(--bg-elev);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: .9em;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+}
+.msg-content pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 14px 16px;
+    border-radius: 10px;
+    overflow-x: auto;
+    margin: 10px 0;
+    font-size: 13.5px;
+    line-height: 1.55;
+    position: relative;
+    direction: ltr;
+}
+.msg-content pre .code-actions {
+    position: absolute;
+    top: 6px; right: 8px;
+    display: flex; gap: 4px;
+    opacity: 0;
+    transition: opacity .15s;
+}
+.msg-content pre:hover .code-actions { opacity: 1; }
+.msg-content pre .code-actions button {
+    background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.12);
+    color: var(--code-text);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: -apple-system, "Segoe UI", sans-serif;
+}
+.msg-content pre .code-actions button:hover { background: rgba(255,255,255,.16); }
+.msg-content pre .code-lang {
+    position: absolute;
+    top: 6px; left: 8px;
+    font-size: 10px;
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    color: rgba(255,255,255,.5);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+html[dir="rtl"] .msg-content pre .code-actions { right: auto; left: 8px; }
+html[dir="rtl"] .msg-content pre .code-lang     { left: auto; right: 8px; }
+
+.msg-content table {
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 14px;
+}
+.msg-content table th, .msg-content table td {
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    text-align: left;
+}
+.msg-content table th { background: var(--bg-elev); font-weight: 600; }
+html[dir="rtl"] .msg-content table th,
+html[dir="rtl"] .msg-content table td { text-align: right; }
+
+.load-banner {
+    background: rgba(217, 119, 6, .08);
+    border: 1px solid rgba(217, 119, 6, .25);
+    color: var(--warn);
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    margin: 12px 0;
+}
+.load-banner b { font-weight: 600; }
+.load-banner a { color: var(--warn); text-decoration: underline; cursor: pointer; }
+
+.msg-edit-form { margin-top: 4px; }
+.msg-edit-form textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    font: inherit; font-size: 14px;
+    background: var(--bg); color: var(--text);
+    min-height: 60px;
+}
+.msg-edit-form .actions { display: flex; gap: 6px; margin-top: 6px; }
+.msg-content pre code { background: transparent; padding: 0; color: inherit; }
+.msg-content ul, .msg-content ol { margin: 0 0 12px; padding-left: 24px; }
+.msg-content li { margin-bottom: 4px; }
+.msg-content blockquote {
+    border-left: 3px solid var(--border-strong);
+    padding-left: 12px;
+    color: var(--text-dim);
+    margin: 10px 0;
+}
+.msg-content a { color: var(--accent); }
+.msg-actions {
+    margin-top: 6px;
+    display: flex; gap: 4px;
+    opacity: 0;
+    transition: opacity .15s;
+}
+.msg:hover .msg-actions { opacity: 1; }
+.msg-actions button {
+    background: transparent; border: 0;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-faint);
+    font-size: 12px;
+    display: inline-flex; align-items: center; gap: 4px;
+}
+.msg-actions button:hover { background: var(--bg-elev); color: var(--text); }
+.msg-meta { font-size: 11px; color: var(--text-faint); margin-top: 4px; }
+
+.typing-cursor {
+    display: inline-block;
+    width: 7px; height: 16px;
+    background: var(--text);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink 1s infinite;
+}
+@keyframes blink { 0%,50% { opacity: 1; } 51%,100% { opacity: 0; } }
+
+/* ============ Input ============ */
+.input-wrap { padding: 6px 24px 16px; background: var(--bg); }
+.input-card {
+    max-width: 760px;
+    margin: 0 auto;
+    background: var(--bg-input);
+    border: 1px solid var(--border-strong);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    padding: 12px 12px 8px;
+    transition: border-color .15s;
+}
+.input-card:focus-within { border-color: var(--text-faint); }
+.input-card textarea {
+    width: 100%;
+    border: 0; outline: none; resize: none;
+    font: inherit;
+    background: transparent;
+    color: var(--text);
+    line-height: 1.5;
+    max-height: 180px;
+    min-height: 24px;
+    padding: 4px 6px;
+}
+.input-card textarea::placeholder { color: var(--text-faint); }
+.input-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 4px;
+}
+.input-row-left { display: flex; gap: 4px; align-items: center; color: var(--text-faint); font-size: 12px; }
+.send-btn {
+    width: 34px; height: 34px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--text); color: var(--bg);
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: opacity .15s, transform .12s;
+}
+.send-btn:disabled { opacity: .3; cursor: not-allowed; }
+.send-btn:not(:disabled):hover { transform: scale(1.05); }
+.send-btn.stop { background: var(--danger); }
+.input-foot { text-align: center; font-size: 11px; color: var(--text-faint); margin-top: 8px; }
+
+/* ============ Modal ============ */
+.modal-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.4);
+    align-items: center; justify-content: center;
+    z-index: 100;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+    background: var(--bg);
+    color: var(--text);
+    border-radius: 14px;
+    width: min(640px, 92vw);
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0,0,0,.3);
+}
+.modal-head {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0;
+    background: var(--bg); z-index: 2;
+}
+.modal-head h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.tabs {
+    display: flex; gap: 4px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 56px; background: var(--bg); z-index: 1;
+}
+.tab {
+    padding: 10px 14px;
+    background: transparent; border: 0; border-bottom: 2px solid transparent;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 14px; font-weight: 500;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-content { display: none; padding: 16px 20px; }
+.tab-content.active { display: block; }
+.modal-foot {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 8px; justify-content: flex-end;
+    position: sticky; bottom: 0;
+    background: var(--bg);
+}
+.btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg); color: var(--text);
+    cursor: pointer;
+    font-size: 14px;
+}
+.btn:hover { background: var(--bg-elev); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+.field { margin-bottom: 16px; }
+.field label {
+    display: block; font-size: 13px; color: var(--text-dim); font-weight: 500;
+    margin-bottom: 6px;
+}
+.field input[type="text"], .field input[type="number"], .field textarea, .field select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    font-size: 14px;
+}
+.field textarea { resize: vertical; min-height: 80px; font-family: -apple-system, "Segoe UI", sans-serif; }
+.field .hint { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
+.field-row { display: flex; gap: 10px; }
+.field-row .field { flex: 1; }
+.slider-row { display: flex; align-items: center; gap: 12px; }
+.slider-row input[type="range"] { flex: 1; }
+.slider-row .val {
+    min-width: 50px; text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px; color: var(--text-dim);
+}
+.model-list { display: flex; flex-direction: column; gap: 6px; }
+.model-card {
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all .15s;
+}
+.model-card:hover { background: var(--bg-elev); }
+.model-card.active { border-color: var(--accent); background: var(--accent-faint); }
+.model-card .name { font-weight: 500; color: var(--text); }
+.model-card .path { font-size: 11px; color: var(--text-faint); margin-top: 2px; font-family: "SF Mono", Menlo, monospace; word-break: break-all; }
+.model-card .size { font-size: 11px; color: var(--text-faint); }
+
+@media (max-width: 768px) {
+    .sidebar { position: absolute; left: 0; top: 0; bottom: 0; z-index: 50; box-shadow: var(--shadow); }
+    .suggestions { grid-template-columns: 1fr; }
+    .modes { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* RTL */
+html[dir="rtl"] body { direction: rtl; }
+html[dir="rtl"] .sidebar { border-right: 0; border-left: 1px solid var(--border); }
+html[dir="rtl"] .sidebar.hidden { margin-left: 0; margin-right: -270px; }
+html[dir="rtl"] .msg { flex-direction: row-reverse; }
+html[dir="rtl"] .msg-content { text-align: right; }
+
+/* Chat toolbar below input */
+.chat-toolbar {
+    max-width: 760px;
+    margin: 0 auto 8px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 4px;
+}
+.ct-group {
+    display: flex; align-items: center; gap: 4px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 4px 2px 10px;
+}
+.ct-label {
+    font-size: 11px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-weight: 600;
+}
+.ct-select {
+    background: transparent;
+    border: 0;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    padding: 4px 6px;
+    cursor: pointer;
+    max-width: 180px;
+}
+.ct-select:focus { outline: none; }
+.ct-spacer { flex: 1; }
+.ct-btn {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-dim);
+    display: inline-flex; align-items: center; gap: 4px;
+}
+.ct-btn:hover { background: var(--bg); color: var(--text); }
+@media (max-width: 640px) {
+    .chat-toolbar { gap: 4px; }
+    .ct-select { max-width: 120px; font-size: 12px; }
+    .ct-btn span { display: none; }
+}
+
+/* Lang pill in topbar */
+.lang-pill {
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 12px; font-weight: 500;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+.lang-pill:hover { background: var(--bg-elev); color: var(--text); }
+
+/* User menu */
+.user-menu {
+    position: relative;
+    display: inline-flex;
+    cursor: pointer;
+    outline: none;
+}
+.user-menu .avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 13px;
+}
+.user-menu-dropdown {
+    display: none;
+    position: absolute;
+    top: 38px; right: 0;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    min-width: 180px;
+    padding: 10px 12px;
+    z-index: 50;
+}
+.user-menu:focus-within .user-menu-dropdown,
+.user-menu.open .user-menu-dropdown { display: block; }
+.user-menu-name { font-weight: 600; font-size: 14px; }
+.user-menu-role { font-size: 12px; color: var(--text-faint); text-transform: capitalize; }
+.user-menu-dropdown a {
+    display: block;
+    padding: 6px 8px;
+    margin: 2px -8px;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 14px;
+    border-radius: 6px;
+}
+.user-menu-dropdown a:hover { background: var(--bg-elev); }
+html[dir="rtl"] .user-menu-dropdown { right: auto; left: 0; }
+</style>
+</head>
+<body>
+
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="brand">
+            <span class="brand-mark">S</span>
+            <span>Filamind AI</span>
+        </div>
+    </div>
+    <button class="new-chat" id="btnNewChat">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span data-i18n="chat.new_chat">New chat</span>
+    </button>
+    <div style="padding: 4px 10px 6px;">
+        <input type="text" id="convSearch" placeholder="Search conversations…" data-i18n-placeholder="actions.search_conversations" style="width:100%; padding:6px 10px; background: var(--bg); border:1px solid var(--border); border-radius:8px; font-size:13px; color:var(--text);">
+    </div>
+    <div class="modes" id="modes"></div>
+    <div class="conv-list" id="convList"></div>
+    <div class="sidebar-footer">
+        <button id="btnSettings">⚙ Settings</button>
+        <button id="btnTheme" title="Toggle theme">🌓</button>
+    </div>
+</aside>
+
+<main class="main">
+    <header class="topbar">
+        <button class="topbar-toggle" id="btnToggleSidebar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button>
+        <div class="model-pill" id="modelPill">
+            <span class="dot off" id="statusDot"></span>
+            <span id="modelName">Checking server…</span>
+        </div>
+        <div class="mode-pill" id="modePill"><span id="modeIcon">💬</span> <span id="modeName">Chat</span></div>
+        <select class="provider-select" id="providerSelect" title="Provider"></select>
+        <div class="spacer"></div>
+        <button class="icon-btn" id="btnRegen" data-i18n-title="chat.regenerate" title="Regenerate last response"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button>
+        <button class="icon-btn" id="btnExport" data-i18n-title="actions.export_conversation" title="Export conversation"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+        <button class="icon-btn" id="btnMic" data-i18n-title="actions.voice_input" title="Voice input" style="display:none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+        <button class="lang-pill" id="btnLang" title="Language">EN</button>
+        <div class="user-menu" id="userMenu" tabindex="0">
+            <span class="avatar" id="meAvatar">U</span>
+            <div class="user-menu-dropdown" id="userMenuDropdown">
+                <div class="user-menu-name" id="meName">…</div>
+                <div class="user-menu-role" id="meRole">user</div>
+                <hr style="border:0; border-top:1px solid var(--border); margin:8px 0;">
+                <a href="/profile.html" data-i18n="app.profile">Profile</a>
+                <a href="/admin.html" id="meAdminLink" style="display:none" data-i18n="app.admin">Admin</a>
+                <a href="#" id="meLogout" data-i18n="app.logout">Sign out</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="messages" id="messages">
+        <div class="messages-inner" id="messagesInner"></div>
+    </div>
+
+    <div class="input-wrap">
+        <div class="chat-toolbar">
+            <div class="ct-group">
+                <label class="ct-label" data-i18n="toolbar.agent">Agent</label>
+                <select class="ct-select" id="agentSelectBottom" title="Active agent"></select>
+            </div>
+            <div class="ct-group">
+                <label class="ct-label" data-i18n="toolbar.provider">Provider</label>
+                <select class="ct-select" id="providerSelectBottom" title="LLM provider"></select>
+            </div>
+            <div class="ct-group">
+                <label class="ct-label" data-i18n="toolbar.model">Model</label>
+                <select class="ct-select" id="modelSelectBottom" title="Model"></select>
+            </div>
+            <div class="ct-spacer"></div>
+            <button class="ct-btn" id="btnToolsBottom" data-i18n-title="toolbar.tools_title" title="Tools (insert helpers)">🧰 <span data-i18n="toolbar.tools">Tools</span></button>
+            <button class="ct-btn" id="btnFilesBottom" data-i18n-title="toolbar.files_title" title="Attach file (coming soon)">📁 <span data-i18n="toolbar.files">Files</span></button>
+            <button class="ct-btn" id="btnMcpBottom" data-i18n-title="toolbar.mcp_title" title="MCP servers (coming soon)">🔌 <span data-i18n="toolbar.mcp">MCP</span></button>
+        </div>
+        <div class="input-card">
+            <textarea id="inputBox" rows="1" placeholder="Message Filamind AI..." autofocus></textarea>
+            <div class="input-row">
+                <div class="input-row-left"><span id="tokenInfo"></span></div>
+                <button class="send-btn" id="btnSend" disabled title="Send (Enter)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg></button>
+            </div>
+        </div>
+        <div class="input-foot">Filamind AI runs locally on <span id="serverHint">your NAS</span>. <span id="footVersion" style="opacity:.6"></span></div>
+    </div>
+</main>
+
+<div class="modal-backdrop" id="settingsModal">
+    <div class="modal">
+        <div class="modal-head">
+            <h2>Settings</h2>
+            <button class="icon-btn" onclick="closeSettings()">✕</button>
+        </div>
+        <div class="tabs">
+            <button class="tab active" data-tab="general">General</button>
+            <button class="tab" data-tab="sampling">Sampling</button>
+            <button class="tab" data-tab="providers">Providers</button>
+            <button class="tab" data-tab="resources">Resources</button>
+            <button class="tab" data-tab="models">Models</button>
+            <button class="tab" data-tab="system">System</button>
+            <button class="tab" data-tab="modes">Agents</button>
+            <button class="tab" data-tab="connection">Connection</button>
+            <button class="tab" data-tab="mcp">MCP</button>
+        </div>
+
+        <div class="tab-content active" data-tab-content="general">
+            <div class="field">
+                <label>System prompt (overrides mode preset if set)</label>
+                <textarea id="cfgSystem" placeholder="You are a helpful assistant..."></textarea>
+                <div class="hint">Persistent instructions sent to the model at the start of every conversation.</div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Max response tokens</label>
+                    <input type="number" id="cfgMaxTok" value="512" min="64" max="32768">
+                    <div class="hint">512 is a good default. Very high values can make small models ramble or hold the engine slot.</div>
+                </div>
+                <div class="field">
+                    <label>Seed</label>
+                    <input type="number" id="cfgSeed" value="-1" min="-1">
+                    <div class="hint">-1 = random</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" data-tab-content="sampling">
+            <div class="field-row">
+                <div class="field">
+                    <label>Temperature</label>
+                    <div class="slider-row">
+                        <input type="range" id="cfgTemp" min="0" max="2" step="0.05" value="0.7">
+                        <span class="val" id="cfgTempVal">0.70</span>
+                    </div>
+                </div>
+                <div class="field">
+                    <label>Top-P (nucleus)</label>
+                    <div class="slider-row">
+                        <input type="range" id="cfgTopP" min="0" max="1" step="0.05" value="0.95">
+                        <span class="val" id="cfgTopPVal">0.95</span>
+                    </div>
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Top-K</label>
+                    <input type="number" id="cfgTopK" value="40" min="0" max="200">
+                </div>
+                <div class="field">
+                    <label>Min-P</label>
+                    <div class="slider-row">
+                        <input type="range" id="cfgMinP" min="0" max="1" step="0.01" value="0.05">
+                        <span class="val" id="cfgMinPVal">0.05</span>
+                    </div>
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Repeat penalty</label>
+                    <div class="slider-row">
+                        <input type="range" id="cfgRepPen" min="1" max="2" step="0.01" value="1.1">
+                        <span class="val" id="cfgRepPenVal">1.10</span>
+                    </div>
+                </div>
+                <div class="field">
+                    <label>Repeat last N</label>
+                    <input type="number" id="cfgRepN" value="64" min="0">
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Frequency penalty</label>
+                    <div class="slider-row">
+                        <input type="range" id="cfgFreqPen" min="0" max="2" step="0.05" value="0">
+                        <span class="val" id="cfgFreqPenVal">0.00</span>
+                    </div>
+                </div>
+                <div class="field">
+                    <label>Presence penalty</label>
+                    <div class="slider-row">
+                        <input type="range" id="cfgPresPen" min="0" max="2" step="0.05" value="0">
+                        <span class="val" id="cfgPresPenVal">0.00</span>
+                    </div>
+                </div>
+            </div>
+            <div class="field">
+                <label>Stop sequences (comma-separated)</label>
+                <input type="text" id="cfgStop" placeholder="</s>,User:,Human:">
+            </div>
+            <div class="field">
+                <label>Mirostat</label>
+                <select id="cfgMirostat">
+                    <option value="0">Off</option>
+                    <option value="1">Mirostat v1</option>
+                    <option value="2">Mirostat v2 (recommended)</option>
+                </select>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Mirostat τ (target entropy)</label>
+                    <input type="number" id="cfgMiroTau" value="5.0" step="0.1">
+                </div>
+                <div class="field">
+                    <label>Mirostat η (learning rate)</label>
+                    <input type="number" id="cfgMiroEta" value="0.1" step="0.01">
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" data-tab-content="providers">
+            <div class="field">
+                <label>Cloud AI providers</label>
+                <div class="hint">Configure API keys to use external models (Claude, ChatGPT, Gemini) from the same chat interface. The active provider is picked from the dropdown next to the chat mode at the top.</div>
+            </div>
+            <div id="providerForms"></div>
+            <div class="field">
+                <button class="btn btn-primary" id="btnSaveProviders">Save providers</button>
+                <span id="providersStatus" style="margin-left:10px; font-size:13px; color: var(--text-faint);"></span>
+            </div>
+        </div>
+
+        <div class="tab-content" data-tab-content="resources">
+            <div class="field">
+                <label>These settings are applied by restarting the inference engine. Save below to apply.</label>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Context size (tokens)</label>
+                    <input type="number" id="resCtxSize" min="512" max="131072" step="512">
+                    <div class="hint">4096 / 8192 / 16384 / 32768. Larger = more memory.</div>
+                </div>
+                <div class="field">
+                    <label>GPU layers</label>
+                    <input type="number" id="resGpuLayers" min="0" max="999">
+                    <div class="hint">999 = all layers on GPU. Lower for CPU offload.</div>
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Batch size</label>
+                    <input type="number" id="resBatch" min="32" max="4096" step="32">
+                </div>
+                <div class="field">
+                    <label>U-batch size</label>
+                    <input type="number" id="resUBatch" min="32" max="4096" step="32">
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Threads</label>
+                    <input type="number" id="resThreads" min="1" max="64">
+                </div>
+                <div class="field">
+                    <label>Threads (batch)</label>
+                    <input type="number" id="resThreadsBatch" min="1" max="64">
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Parallel slots</label>
+                    <input type="number" id="resParallel" min="1" max="32">
+                    <div class="hint">Concurrent requests.</div>
+                </div>
+                <div class="field">
+                    <label>Port</label>
+                    <input type="number" id="resPort" min="1" max="65535">
+                    <div class="hint">Changing the port requires restarting the package from DSM.</div>
+                </div>
+            </div>
+            <div class="field">
+                <label>
+                    <input type="checkbox" id="resMlock"> Lock model in RAM (mlock)
+                </label>
+                <div class="hint">Prevents the OS from paging the model out. Recommended on systems with plenty of RAM.</div>
+            </div>
+            <div class="field">
+                <label>
+                    <input type="checkbox" id="resNoMmap"> Disable mmap (fully load to RAM)
+                </label>
+                <div class="hint">Loads the entire model into RAM up-front. Faster, uses more RAM.</div>
+            </div>
+            <div class="field">
+                <label>Extra llama-server arguments</label>
+                <input type="text" id="resExtra" placeholder="e.g. --rope-freq-base 10000">
+                <div class="hint">Advanced: extra command-line flags appended to llama-server.</div>
+            </div>
+            <div class="field">
+                <label>Search directories for .gguf files (colon-separated)</label>
+                <input type="text" id="resModelDirs" placeholder="/volume1/MyModels">
+                <div class="hint">Defaults already include /volume1/FilamindAI/models/ and /volume1/AI/models/.</div>
+            </div>
+            <div class="field">
+                <button class="btn btn-primary" id="btnApplyResources">Apply &amp; restart</button>
+                <button class="btn" id="btnSafeDefaults" title="Auto-tune ctx-size &amp; GPU layers for the current model size">Reset to safe defaults</button>
+                <span id="resApplyStatus" style="margin-left:10px; font-size:13px; color: var(--text-faint);"></span>
+            </div>
+            <div class="hint">
+                For the GTX 1650 (4 GB VRAM): models ≤2 GB can use ctx 8192; ~4 GB models need ctx 2048; &gt;4 GB models offload some layers to CPU. Use "safe defaults" if a model fails to load with "Server offline".
+            </div>
+        </div>
+
+        <div class="tab-content" data-tab-content="models">
+            <div class="field">
+                <label>Installed models</label>
+                <div class="model-list" id="modelList">
+                    <div class="hint">Loading…</div>
+                </div>
+                <div class="hint" style="margin-top:8px">
+                    Click any model to switch. Place new <code>.gguf</code> files in <code>/volume1/FilamindAI/models/</code> (via File Station) and they'll appear here automatically.
+                </div>
+            </div>
+            <div class="field" style="margin-top: 22px;">
+                <label>Download a model from Hugging Face</label>
+                <div class="hint" style="margin-bottom: 12px;">Curated GGUF models that work with this build (Llama, Mistral &amp; Phi-2 family). The file lands in <code>/volume1/FilamindAI/models/</code>.</div>
+                <div id="downloadsActive"></div>
+                <div class="model-list" id="catalogList">
+                    <div class="hint">Loading catalog…</div>
+                </div>
+                <details style="margin-top: 14px;">
+                    <summary style="cursor:pointer; font-size:13px; color: var(--text-dim);">Download a custom URL instead</summary>
+                    <div class="field-row" style="margin-top: 10px;">
+                        <div class="field"><label>GGUF URL</label><input type="text" id="customUrl" placeholder="https://huggingface.co/.../resolve/main/model.gguf"></div>
+                        <div class="field"><label>Filename</label><input type="text" id="customName" placeholder="my-model.gguf"></div>
+                    </div>
+                    <button class="btn" onclick="startCustomDownload()">Start download</button>
+                </details>
+            </div>
+        </div>
+
+        <div class="tab-content" data-tab-content="system">
+            <div class="field">
+                <label>Live system info</label>
+                <div id="sysInfo" style="font-family: 'SF Mono', Menlo, monospace; font-size: 13px; line-height: 1.7;">
+                    Loading…
+                </div>
+            </div>
+            <div class="field">
+                <button class="btn" id="btnRefreshSys">Refresh</button>
+                <button class="btn" id="btnShowLog">Show recent log</button>
+                <button class="btn btn-primary" id="btnDiagnose">Run diagnostic</button>
+                <button class="btn btn-danger" id="btnForceRestart">Force restart engine</button>
+            </div>
+            <div class="field">
+                <pre id="sysLog" style="display:none; max-height: 240px; overflow-y: auto; background: var(--code-bg); color: var(--code-text); padding: 12px; border-radius: 8px; font-size: 12px;"></pre>
+            </div>
+            <div class="field">
+                <pre id="diagOut" style="display:none; max-height: 320px; overflow-y: auto; background: var(--code-bg); color: var(--code-text); padding: 12px; border-radius: 8px; font-size: 12px; white-space: pre-wrap;"></pre>
+            </div>
+            <div class="field">
+                <div class="hint" id="versionLine"></div>
+            </div>
+        </div>
+
+        <div class="tab-content" data-tab-content="connection">
+            <div class="field">
+                <label>Server URL</label>
+                <input type="text" id="cfgServer" placeholder="auto (same origin)">
+                <div class="hint">Leave empty when opening the chat from the DSM icon. Set to <code>http://NAS-IP:8181</code> when accessing from another device.</div>
+            </div>
+            <div class="field">
+                <label>Status polling interval (seconds)</label>
+                <input type="number" id="cfgPollInt" value="30" min="5" max="600">
+                <div class="hint">How often to ping the server. Higher = less network noise.</div>
+            </div>
+            <div class="field">
+                <label><input type="checkbox" id="cfgUseStream"> <span data-i18n="connection.use_streaming">Streaming responses (experimental)</span></label>
+                <div class="hint" data-i18n="connection.use_streaming_hint">When enabled, the assistant's reply appears word-by-word. Disabled by default because llama.cpp b1620 returns HTTP 500 on some streaming combinations; non-streaming is reliable.</div>
+            </div>
+        </div>
+
+        <div class="tab-content" data-tab-content="mcp">
+            <div class="field">
+                <label data-i18n="mcp.title">Model Context Protocol (MCP)</label>
+                <div class="hint" data-i18n="mcp.intro">MCP is an open standard for connecting AI assistants to tools, file systems, databases, and external APIs in a uniform way. Agents that support MCP can read NAS files, query databases, search the web, run scripts, and call any service that exposes an MCP server.</div>
+            </div>
+            <div class="card" style="border-style: dashed; background: var(--bg-elev);">
+                <h2 data-i18n="mcp.coming_title">🔌 Coming in v1.3</h2>
+                <div class="hint" style="margin-bottom: 10px;" data-i18n="mcp.coming_intro">MCP integration is planned for the next release. When shipped, you'll be able to:</div>
+                <ul style="font-size: 14px; line-height: 1.7; color: var(--text-dim); padding-left: 22px;">
+                    <li data-i18n="mcp.feat_servers">Register MCP servers by URL or local command (stdio).</li>
+                    <li data-i18n="mcp.feat_tools">Pick per-agent which tools (resources, prompts, functions) the model can call.</li>
+                    <li data-i18n="mcp.feat_filesystem">Bundled servers: NAS filesystem (allow-listed paths), HTTP fetch (allow-listed hosts), calculator, current time, simple web search.</li>
+                    <li data-i18n="mcp.feat_observability">Per-call audit log so you can see which tools the agent invoked and with what arguments.</li>
+                </ul>
+                <div class="hint" style="margin-top: 10px;" data-i18n="mcp.spec_link">Spec: <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">modelcontextprotocol.io</a></div>
+            </div>
+            <div class="field">
+                <label data-i18n="mcp.registered_servers">Registered MCP servers</label>
+                <div id="mcpServersList"><div class="hint" data-i18n="mcp.no_servers_yet">No MCP servers registered yet.</div></div>
+            </div>
+        </div>
+
+        <div class="tab-content" data-tab-content="modes">
+            <div class="field">
+                <label>Agents (chat personas)</label>
+                <div class="hint">Each agent has a system prompt + sampling defaults + optional preferred local model. Switch between agents from the sidebar. Edit built-in agents or create your own.</div>
+            </div>
+            <div id="agentsList"></div>
+            <details style="margin-top: 18px;">
+                <summary style="cursor:pointer; font-weight:500;">➕ Create new agent</summary>
+                <div style="border:1px solid var(--border); padding:14px; border-radius:10px; margin-top:10px;">
+                    <div class="field-row">
+                        <div class="field"><label>ID (slug)</label><input type="text" id="newAgentId" placeholder="my_helper"></div>
+                        <div class="field"><label>Icon</label><input type="text" id="newAgentIcon" placeholder="🤖" maxlength="4"></div>
+                    </div>
+                    <div class="field"><label>Name</label><input type="text" id="newAgentName" placeholder="My Helper"></div>
+                    <div class="field"><label>Description</label><input type="text" id="newAgentDesc" placeholder="What does this agent do?"></div>
+                    <div class="field"><label>System prompt</label><textarea id="newAgentSys" placeholder="You are a helpful assistant who…"></textarea></div>
+                    <div class="field-row">
+                        <div class="field"><label>Temperature</label><input type="number" id="newAgentTemp" value="0.7" step="0.05" min="0" max="2"></div>
+                        <div class="field"><label>Max tokens</label><input type="number" id="newAgentMax" value="512" min="32" max="32768"></div>
+                    </div>
+                    <button class="btn btn-primary" id="btnCreateAgent">Create agent</button>
+                    <span id="newAgentStatus" style="margin-left:10px; font-size:13px; color:var(--text-faint);"></span>
+                </div>
+            </details>
+        </div>
+
+        <div class="modal-foot">
+            <button class="btn" onclick="closeSettings()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+'use strict';
+
+// ============ Chat modes (presets) — fallback when server agents not loaded ============
+const DEFAULT_MODES = [
+    {
+        id: "chat",
+        name: "Chat",
+        icon: "💬",
+        system: "You are a helpful, friendly, and conversational AI assistant. Reply in a natural, warm tone. Be concise unless the question requires depth.",
+        suggestions: [
+            "Write a short poem about the sea.",
+            "What are 5 healthy lunch ideas under 500 calories?",
+            "Tell me an interesting fact about the universe.",
+            "Help me draft a thank-you note for a colleague."
+        ],
+        sampling: { temp: 0.7, topP: 0.95, topK: 40 }
+    },
+    {
+        id: "code",
+        name: "Code",
+        icon: "💻",
+        system: "You are an expert software engineer. When asked to write code, output clean, idiomatic code in the requested language, with brief comments only where non-obvious. Prefer modern best practices. When debugging, explain the root cause concisely. Use Markdown code fences with language tags.",
+        suggestions: [
+            "Write a Python function to fetch JSON from an API with retries.",
+            "Explain Big-O notation with examples.",
+            "Refactor this code to be more readable: [paste code]",
+            "How do I set up a basic Node.js Express server?"
+        ],
+        sampling: { temp: 0.3, topP: 0.9, topK: 40 }
+    },
+    {
+        id: "writer",
+        name: "Writer",
+        icon: "✍️",
+        system: "You are an experienced writer and editor. Help with drafting, structuring, and polishing prose. Use vivid language when fitting, but keep clarity first. When asked for feedback, point to specific lines and suggest concrete improvements.",
+        suggestions: [
+            "Help me brainstorm a blog post about remote work.",
+            "Edit this paragraph for clarity: [paste paragraph]",
+            "Suggest 5 titles for an article about climate change.",
+            "Write a 200-word LinkedIn post about leadership."
+        ],
+        sampling: { temp: 0.85, topP: 0.95, topK: 50 }
+    },
+    {
+        id: "research",
+        name: "Research",
+        icon: "🔬",
+        system: "You are a careful research assistant. Think step by step. When uncertain, say so. Cite reasoning openly. For complex questions, break them down before answering. Avoid speculation that is not clearly labeled.",
+        suggestions: [
+            "Explain quantum entanglement in simple terms with an analogy.",
+            "Compare the pros and cons of React vs Vue.",
+            "Walk me through how mRNA vaccines work.",
+            "What are the main causes of inflation?"
+        ],
+        sampling: { temp: 0.4, topP: 0.9, topK: 40 }
+    },
+    {
+        id: "translate",
+        name: "Translate",
+        icon: "🌐",
+        system: "You are a professional translator. Translate the user's text accurately. Preserve tone, formality, and intent. If the user does not specify the target language, ask. Provide ONLY the translation unless context is requested.",
+        suggestions: [
+            "Translate to Arabic: 'Hello, how can I help you today?'",
+            "Translate to French: 'The package will arrive tomorrow.'",
+            "Translate to Japanese: 'Thank you very much for your time.'",
+            "Translate this paragraph to Spanish: [paste text]"
+        ],
+        sampling: { temp: 0.3, topP: 0.9, topK: 40 }
+    }
+];
+
+// ============ State ============
+const STATE = {
+    convs: [],
+    currentId: null,
+    streaming: false,
+    abortCtrl: null,
+    modeId: "chat",
+    modes: structuredClone(DEFAULT_MODES),
+    serverOnline: false,
+    provider: "local",
+    providerModel: "",
+    providers: {},
+    settings: {
+        system: "",
+        temp: 0.7, topP: 0.95, topK: 40, minP: 0.05,
+        maxTok: 512, seed: -1,
+        repPen: 1.1, repN: 64,
+        freqPen: 0, presPen: 0,
+        stop: "",
+        mirostat: 0, miroTau: 5.0, miroEta: 0.1,
+        server: "", pollInt: 30,
+        theme: "light",
+        useStream: false
+    },
+    modelName: "",
+    pollTimer: null
+};
+
+const $ = (s) => document.querySelector(s);
+const els = {
+    sidebar:   $("#sidebar"),
+    convList:  $("#convList"),
+    messages:  $("#messages"),
+    messagesInner: $("#messagesInner"),
+    input:     $("#inputBox"),
+    send:      $("#btnSend"),
+    newChat:   $("#btnNewChat"),
+    settings:  $("#btnSettings"),
+    settingsModal: $("#settingsModal"),
+    themeBtn:  $("#btnTheme"),
+    toggleSidebar: $("#btnToggleSidebar"),
+    modelName: $("#modelName"),
+    statusDot: $("#statusDot"),
+    regen:     $("#btnRegen"),
+    modes:     $("#modes"),
+    modeIcon:  $("#modeIcon"),
+    modeName:  $("#modeName"),
+    serverHint: $("#serverHint")
+};
+
+// ============ Persistence ============
+function load() {
+    try {
+        // Read filamindai first; fall back once to legacy "saynologyai" so existing browsers keep their state.
+        const raw = localStorage.getItem("filamindai") || localStorage.getItem("saynologyai");
+        if (raw) {
+            const data = JSON.parse(raw);
+            if (data.convs) STATE.convs = data.convs;
+            if (data.settings) Object.assign(STATE.settings, data.settings);
+            if (data.currentId) STATE.currentId = data.currentId;
+            if (data.modeId) STATE.modeId = data.modeId;
+            if (data.modes) STATE.modes = data.modes;
+        }
+    } catch (e) { console.warn(e); }
+}
+function save() {
+    try {
+        localStorage.setItem("filamindai", JSON.stringify({
+            convs: STATE.convs,
+            currentId: STATE.currentId,
+            settings: STATE.settings,
+            modeId: STATE.modeId,
+            modes: STATE.modes
+        }));
+    } catch (e) { console.warn(e); }
+}
+
+function serverURL() {
+    if (STATE.settings.server) return STATE.settings.server.replace(/\/+$/, "");
+    return "";
+}
+
+// ============ Markdown ============
+function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function renderMarkdown(text) {
+    let out = "";
+    const parts = text.split(/(```[a-zA-Z0-9_+-]*\n[\s\S]*?```|```[a-zA-Z0-9_+-]*\n[\s\S]*$)/);
+    for (const part of parts) {
+        if (part.startsWith("```")) {
+            const m = part.match(/^```([a-zA-Z0-9_+-]*)\n([\s\S]*?)(?:```|$)/);
+            if (m) {
+                const lang = (m[1] || "").trim();
+                const code = escapeHtml(m[2]);
+                const langTag = lang ? `<span class="code-lang">${escapeHtml(lang)}</span>` : "";
+                out += `<pre>${langTag}<div class="code-actions"><button onclick="copyCode(this)" data-i18n="chat.copy">Copy</button></div><code>${code}</code></pre>`;
+                continue;
+            }
+        }
+        out += renderInline(part);
+    }
+    return out;
+}
+// Clipboard helper — falls back to execCommand on plain HTTP (LAN) where navigator.clipboard is gated.
+async function copyToClipboardSafe(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        try { await navigator.clipboard.writeText(text); return true; } catch (_) {}
+    }
+    try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:none;outline:none;background:transparent;opacity:0;";
+        document.body.appendChild(ta);
+        ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length);
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        return ok;
+    } catch (e) { return false; }
+}
+window.copyCode = async function(btn) {
+    const code = btn.closest("pre").querySelector("code").innerText;
+    const ok = await copyToClipboardSafe(code);
+    const orig = btn.textContent;
+    btn.textContent = ok ? ((window.tStr && window.tStr("chat.copied")) || "Copied") : "✗";
+    setTimeout(() => btn.textContent = orig, 1200);
+};
+function renderInline(text) {
+    let s = escapeHtml(text);
+    s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+    s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/(^|[^\*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    s = s.replace(/^### (.+)$/gm, "<h3>$1</h3>");
+    s = s.replace(/^## (.+)$/gm, "<h2>$1</h2>");
+    s = s.replace(/^# (.+)$/gm, "<h1>$1</h1>");
+    s = s.replace(/(^|\n)- (.+)/g, "$1<li>$2</li>");
+    s = s.replace(/(<li>.*<\/li>(\n|$))+/g, m => "<ul>" + m.replace(/\n+/g,"") + "</ul>");
+    return s.split(/\n\n+/).map(p =>
+        p.includes("<") && (p.startsWith("<ul") || p.startsWith("<h") || p.startsWith("<pre"))
+            ? p : `<p>${p.replace(/\n/g, "<br>")}</p>`
+    ).join("");
+}
+
+// ============ Conversations ============
+function currentMode() { return STATE.modes.find(m => m.id === STATE.modeId) || STATE.modes[0]; }
+function currentConv() { return STATE.convs.find(c => c.id === STATE.currentId); }
+
+function newConversation() {
+    const id = "c_" + Date.now() + "_" + Math.random().toString(36).slice(2,7);
+    const m = currentMode();
+    STATE.convs.unshift({ id, title: "New chat", messages: [], createdAt: Date.now(), modeId: m.id });
+    STATE.currentId = id;
+    save();
+    renderConvList();
+    renderMessages();
+    els.input.focus();
+}
+function switchConv(id) {
+    STATE.currentId = id;
+    const c = currentConv();
+    if (c && c.modeId) STATE.modeId = c.modeId;
+    save();
+    renderModes();
+    renderConvList();
+    renderMessages();
+    updateModePill();
+}
+function deleteConv(id) {
+    STATE.convs = STATE.convs.filter(c => c.id !== id);
+    if (STATE.currentId === id) STATE.currentId = STATE.convs.length ? STATE.convs[0].id : null;
+    save();
+    renderConvList();
+    renderMessages();
+}
+function titleFromMessage(text) {
+    return text.replace(/\s+/g," ").trim().slice(0,38) + (text.length > 38 ? "…" : "");
+}
+
+// ============ Mode switching ============
+function renderModes() {
+    let html = "";
+    for (const m of STATE.modes) {
+        const a = m.id === STATE.modeId ? "active" : "";
+        html += `<button class="mode-btn ${a}" onclick="setMode('${m.id}')"><span class="icon">${m.icon}</span><span>${m.name}</span></button>`;
+    }
+    els.modes.innerHTML = html;
+    renderAgentSelectBottom();
+}
+function setMode(id) {
+    STATE.modeId = id;
+    const c = currentConv();
+    if (c) c.modeId = id;
+    save();
+    renderModes();
+    updateModePill();
+    if (!c || c.messages.length === 0) renderMessages();
+}
+function updateModePill() {
+    const m = currentMode();
+    els.modeIcon.textContent = m.icon;
+    els.modeName.textContent = m.name;
+}
+
+// ============ Rendering ============
+function renderConvList() {
+    const q = (STATE.convSearch || "").trim().toLowerCase();
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayMs = today.getTime();
+    const tConvs = [], oConvs = [];
+    const matchedConvs = q ? STATE.convs.filter(c =>
+        (c.title || "").toLowerCase().includes(q) ||
+        (c.messages || []).some(m => (m.content || "").toLowerCase().includes(q))
+    ) : STATE.convs;
+    for (const c of matchedConvs) (c.createdAt >= todayMs ? tConvs : oConvs).push(c);
+    let html = "";
+    const todayLbl = (window.tStr && window.tStr("chat.today")) || "Today";
+    const olderLbl = (window.tStr && window.tStr("chat.older")) || "Older";
+    if (tConvs.length) {
+        html += `<div class="conv-section-label">${todayLbl}</div>`;
+        for (const c of tConvs) html += renderConvItem(c);
+    }
+    if (oConvs.length) {
+        html += `<div class="conv-section-label">${olderLbl}</div>`;
+        for (const c of oConvs) html += renderConvItem(c);
+    }
+    if (q && !tConvs.length && !oConvs.length) {
+        html = `<div class="hint" style="padding: 12px;">${(window.tStr && window.tStr("actions.no_matches")) || "No matches"}</div>`;
+    }
+    els.convList.innerHTML = html;
+}
+function renderConvItem(c) {
+    const a = c.id === STATE.currentId ? "active" : "";
+    const m = STATE.modes.find(x => x.id === c.modeId);
+    const icon = m ? m.icon : "💬";
+    return `<div class="conv-item ${a}" onclick="switchConv('${c.id}')">
+        <span class="conv-item-title">${icon} ${escapeHtml(c.title)}</span>
+        <button class="conv-item-del" onclick="event.stopPropagation(); deleteConv('${c.id}')" title="Delete">×</button>
+    </div>`;
+}
+function renderMessages() {
+    const conv = currentConv();
+    if (!conv || conv.messages.length === 0) {
+        const m = currentMode();
+        const sugs = (m.suggestions || []).map(s =>
+            `<button class="suggestion" onclick="useSuggestion(this)">${escapeHtml(s)}</button>`
+        ).join("");
+        els.messagesInner.innerHTML = `<div class="welcome">
+            <span class="mode-label">${m.icon} ${m.name} mode</span>
+            <h1>How can I help you today?</h1>
+            <p>Local model on your NAS GPU. Conversations stay in your browser.</p>
+            <div class="suggestions">${sugs}</div>
+        </div>`;
+        return;
+    }
+    let html = "";
+    // If the local engine is in a failed state, show a banner above the chat
+    if (STATE.serverLoadError && STATE.provider === "local") {
+        const tryCloud = (window.tStr && window.tStr("errors.try_cloud_hint")) ||
+                         "Or open Settings → Providers and use Claude / ChatGPT / Gemini instead.";
+        html += `<div class="load-banner">
+            <b>⚠️ ${(window.tStr && window.tStr("errors.model_load_failed")) || "Model failed to load"}</b><br>
+            ${escapeHtml(STATE.serverLoadError)}<br>
+            <a onclick="openSettings(); document.querySelector('.tab[data-tab=\\"models\\"]').click();">${(window.tStr && window.tStr("errors.pick_smaller_model")) || "Choose a smaller model"}</a>
+            &nbsp;·&nbsp;
+            ${tryCloud}
+        </div>`;
+    }
+    conv.messages.forEach((msg, i) => { html += renderMessage(msg, i); });
+    els.messagesInner.innerHTML = html;
+    scrollToBottom();
+}
+function renderMessage(m, idx) {
+    const role = m.role === "user" ? "user" : "assistant";
+    const avatar = role === "user" ? "U" : "S";
+    const author = role === "user"
+        ? ((window.tStr && window.tStr("chat.you")) || "You")
+        : ((window.tStr && window.tStr("chat.assistant")) || "Filamind");
+    const content = role === "assistant"
+        ? renderMarkdown(m.content || "")
+        : `<p>${escapeHtml(m.content).replace(/\n/g,"<br>")}</p>`;
+    const meta = m.meta ? `<div class="msg-meta">${escapeHtml(m.meta)}</div>` : "";
+    const actions = role === "assistant"
+        ? `<div class="msg-actions">
+             <button onclick="copyMessage(this)">📋 ${(window.tStr && window.tStr("chat.copy")) || "Copy"}</button>
+           </div>`
+        : `<div class="msg-actions">
+             <button onclick="editUserMessage(${idx})">✏️ ${(window.tStr && window.tStr("actions.edit")) || "Edit"}</button>
+           </div>`;
+    return `<div class="msg ${role}" data-idx="${idx}">
+        <div class="msg-avatar">${avatar}</div>
+        <div class="msg-body">
+            <div class="msg-author">${author}</div>
+            <div class="msg-content">${content}</div>
+            ${meta}
+            ${actions}
+        </div>
+    </div>`;
+}
+window.editUserMessage = function(idx) {
+    const conv = currentConv();
+    if (!conv || !conv.messages[idx]) return;
+    const m = conv.messages[idx];
+    if (m.role !== "user") return;
+    const msgEl = els.messagesInner.querySelector(`.msg[data-idx="${idx}"] .msg-content`);
+    if (!msgEl) return;
+    const old = m.content;
+    msgEl.innerHTML = `<div class="msg-edit-form">
+        <textarea>${escapeHtml(old)}</textarea>
+        <div class="actions">
+            <button class="btn btn-primary" onclick="submitEdit(${idx}, this)">Save &amp; resend</button>
+            <button class="btn" onclick="cancelEdit(${idx})">Cancel</button>
+        </div>
+    </div>`;
+    msgEl.querySelector("textarea").focus();
+};
+window.cancelEdit = function(idx) { renderMessages(); };
+window.submitEdit = function(idx, btn) {
+    const ta = btn.closest(".msg-edit-form").querySelector("textarea");
+    const newText = ta.value.trim();
+    if (!newText) return;
+    const conv = currentConv();
+    if (!conv) return;
+    // Truncate after this user turn, replace the user content, then resend
+    conv.messages = conv.messages.slice(0, idx + 1);
+    conv.messages[idx].content = newText;
+    save();
+    renderMessages();
+    els.input.value = "";
+    // Re-submit by emulating sendMessage but starting from existing user message
+    resendFromConv();
+};
+
+async function resendFromConv() {
+    if (STATE.streaming) return;
+    const conv = currentConv();
+    if (!conv || !conv.messages.length) return;
+    if (conv.messages[conv.messages.length - 1].role !== "user") return;
+    conv.messages.push({ role: "assistant", content: "", meta: "" });
+    renderMessages();
+    STATE.streaming = true;
+    STATE.abortCtrl = new AbortController();
+    updateSendButton();
+    const lastMsgEl = els.messagesInner.querySelector(".msg.assistant:last-child .msg-content");
+    const s = STATE.settings;
+    const sysPrompt = s.system || currentMode().system || "";
+    try {
+        const body = {
+            messages: buildMessages(conv, sysPrompt),
+            temperature: Number(s.temp),
+            max_tokens: Math.max(1, parseInt(s.maxTok) || 512),
+            provider: STATE.provider || "local",
+            agent_id: STATE.modeId,
+        };
+        if (STATE.providerModel) body.model = STATE.providerModel;
+        const resp = await fetch(serverURL() + "/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            signal: STATE.abortCtrl.signal
+        });
+        if (!resp.ok) {
+            const t = await resp.text();
+            throw new Error(`HTTP ${resp.status}: ${t.slice(0,200)}`);
+        }
+        const j = await resp.json();
+        const text = j.content || "";
+        const last = conv.messages[conv.messages.length-1];
+        last.content = text;
+        last.meta = (j.usage && j.usage.completion_tokens ? j.usage.completion_tokens + " tokens" : "");
+        if (lastMsgEl) lastMsgEl.innerHTML = renderMarkdown(text || "(empty)");
+    } catch (e) {
+        if (e.name !== "AbortError") {
+            const last = conv.messages[conv.messages.length-1];
+            last.content = "⚠️ " + e.message;
+            if (lastMsgEl) lastMsgEl.innerHTML = renderMarkdown(last.content);
+        }
+    } finally {
+        STATE.streaming = false;
+        STATE.abortCtrl = null;
+        updateSendButton();
+        renderMessages();
+        save();
+    }
+}
+function scrollToBottom() {
+    els.messages.scrollTop = els.messages.scrollHeight;
+}
+window.useSuggestion = function(btn) {
+    els.input.value = btn.textContent;
+    els.input.dispatchEvent(new Event("input"));
+    sendMessage();
+};
+
+// ============ Sending / streaming ============
+async function sendMessage() {
+    const text = els.input.value.trim();
+    if (!text) return;
+    if (STATE.streaming) {
+        // User pressed Enter while a previous request was still running — abort it
+        try { STATE.abortCtrl && STATE.abortCtrl.abort(); } catch (e) {}
+        STATE.streaming = false;
+    }
+    if (!STATE.currentId) newConversation();
+    let conv = currentConv();
+    conv.modeId = STATE.modeId;
+
+    const finalText = expandSlashCommand(text);
+    conv.messages.push({ role: "user", content: finalText });
+    if (conv.title === "New chat" || !conv.title) conv.title = titleFromMessage(finalText);
+    els.input.value = "";
+    els.input.style.height = "auto";
+    save();
+    renderConvList();
+    renderMessages();
+
+    conv.messages.push({ role: "assistant", content: "", meta: "" });
+    renderMessages();
+    const lastMsgEl = els.messagesInner.querySelector(".msg.assistant:last-child .msg-content");
+
+    STATE.streaming = true;
+    STATE.abortCtrl = new AbortController();
+    updateSendButton();
+
+    const s = STATE.settings;
+    const startedAt = performance.now();
+    const stops = (s.stop || "").split(",").map(x => x.trim()).filter(Boolean);
+    const sysPrompt = s.system || currentMode().system || "";
+
+    // Build body with minimal fields; add advanced ones only when non-default.
+    // Older llama.cpp (b1620) is strict about types and will 500 on some combos.
+    const useStream = !!s.useStream;
+    const body = {
+        stream: useStream,
+        messages: buildMessages(conv, sysPrompt),
+        temperature: Number(s.temp),
+        max_tokens: Math.max(1, parseInt(s.maxTok) || 2048)
+    };
+    if (Number(s.topP) > 0 && Number(s.topP) < 1)    body.top_p = Number(s.topP);
+    if (parseInt(s.topK) > 0)                         body.top_k = parseInt(s.topK);
+    if (Number(s.minP) > 0)                           body.min_p = Number(s.minP);
+    if (Number(s.repPen) !== 1.0)                     body.repeat_penalty = Number(s.repPen);
+    if (parseInt(s.repN) > 0)                         body.repeat_last_n = parseInt(s.repN);
+    if (Number(s.freqPen) > 0)                        body.frequency_penalty = Number(s.freqPen);
+    if (Number(s.presPen) > 0)                        body.presence_penalty = Number(s.presPen);
+    if (parseInt(s.seed) >= 0)                        body.seed = parseInt(s.seed);
+    if (parseInt(s.mirostat) > 0) {
+        body.mirostat     = parseInt(s.mirostat);
+        body.mirostat_tau = Number(s.miroTau);
+        body.mirostat_eta = Number(s.miroEta);
+    }
+    if (stops.length) body.stop = stops;
+
+    // Provider routing — local goes via /api/chat too (non-streaming, unified)
+    const provider = STATE.provider || "local";
+    const chatUrl = serverURL() + (provider === "local" && useStream
+        ? "/v1/chat/completions" : "/api/chat");
+    if (provider !== "local" || !useStream) {
+        delete body.stream;
+        body.provider = provider;
+        if (STATE.providerModel) body.model = STATE.providerModel;
+        // Include the agent so the daemon can apply its system prompt + preferred model
+        if (STATE.modeId) body.agent_id = STATE.modeId;
+    }
+
+    let accumulated = "";
+    let tokenCount = 0;
+    try {
+        const resp = await fetch(chatUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            signal: STATE.abortCtrl.signal
+        });
+        if (!resp.ok) {
+            const t = await resp.text();
+            // Try to extract a friendly hint from the daemon's JSON error
+            let hint = "";
+            try {
+                const j = JSON.parse(t);
+                if (j.hint) hint = "\n\n💡 " + j.hint;
+            } catch (e) {}
+            throw new Error(`HTTP ${resp.status}: ${t.slice(0,200)}${hint}`);
+        }
+
+        if (useStream && provider === "local") {
+            // Streaming path (SSE)
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+            outer: while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop();
+                for (const line of lines) {
+                    if (!line.startsWith("data: ")) continue;
+                    const data = line.slice(6).trim();
+                    if (data === "[DONE]") break outer;
+                    try {
+                        const j = JSON.parse(data);
+                        const delta = j.choices?.[0]?.delta?.content || "";
+                        if (delta) {
+                            accumulated += delta;
+                            tokenCount++;
+                            const last = conv.messages[conv.messages.length-1];
+                            last.content = accumulated;
+                            if (lastMsgEl) {
+                                lastMsgEl.innerHTML = renderMarkdown(accumulated) + '<span class="typing-cursor"></span>';
+                                if (tokenCount % 4 === 0) scrollToBottom();
+                            }
+                        }
+                    } catch (e) {}
+                }
+            }
+        } else {
+            // Non-streaming path — single JSON response
+            const j = await resp.json();
+            // /api/chat returns {content, model, usage, provider}
+            // /v1/chat/completions (legacy local) returns {choices: [{message:{content}}], usage}
+            accumulated = j.content || j.choices?.[0]?.message?.content || "";
+            tokenCount = j.usage?.completion_tokens || 0;
+            const last = conv.messages[conv.messages.length-1];
+            last.content = accumulated;
+        }
+        const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1);
+        const tps = tokenCount > 0 ? (tokenCount / elapsed).toFixed(1) : "?";
+        const last = conv.messages[conv.messages.length-1];
+        last.meta = `${tokenCount} tokens · ${elapsed}s · ${tps} tok/s`;
+        if (lastMsgEl) lastMsgEl.innerHTML = renderMarkdown(accumulated || "(empty response)");
+    } catch (e) {
+        if (e.name !== "AbortError") {
+            const last = conv.messages[conv.messages.length-1];
+            last.content = "⚠️  **Connection error**\n\n" + e.message + "\n\nIs the model running? Check Package Center → Filamind AI → Run.";
+            if (lastMsgEl) lastMsgEl.innerHTML = renderMarkdown(last.content);
+        }
+    } finally {
+        STATE.streaming = false;
+        STATE.abortCtrl = null;
+        updateSendButton();
+        renderMessages();
+        save();
+    }
+}
+
+function buildMessages(conv, system) {
+    const arr = [];
+    if (system) arr.push({ role: "system", content: system });
+    // Skip prior assistant messages that are connection-error placeholders —
+    // including them poisons the chat history and confuses smaller models.
+    for (const m of conv.messages) {
+        if (!m.content) continue;
+        if (m.role === "assistant" && /^⚠️/.test(m.content)) continue;
+        arr.push({ role: m.role, content: m.content });
+    }
+    // Cap history at the last 20 turns so we don't blow past the model's context
+    if (arr.length > 21) {
+        const sys = arr[0].role === "system" ? [arr[0]] : [];
+        const tail = arr.slice(-20);
+        return [...sys, ...tail];
+    }
+    return arr;
+}
+
+function stopGeneration() { if (STATE.abortCtrl) STATE.abortCtrl.abort(); }
+
+function updateSendButton() {
+    const has = els.input.value.trim().length > 0;
+    if (STATE.streaming) {
+        els.send.disabled = false;
+        els.send.classList.add("stop");
+        els.send.title = "Stop";
+        els.send.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+    } else {
+        els.send.disabled = !has;
+        els.send.classList.remove("stop");
+        els.send.title = "Send";
+        els.send.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>';
+    }
+}
+
+// ============ Status check (improved) ============
+async function refreshServerStatus() {
+    if (STATE.streaming) {
+        if (!STATE.serverOnline) markOnline("Streaming…");
+        return;
+    }
+    const url = serverURL();
+    els.serverHint.textContent = url || "your NAS";
+
+    // Ask the daemon for a richer status (load_state, load_error)
+    try {
+        const ctl = new AbortController();
+        const t = setTimeout(() => ctl.abort(), 3000);
+        const r = await fetch(url + "/api/status", { signal: ctl.signal });
+        clearTimeout(t);
+        if (r.ok) {
+            const j = await r.json();
+            const prevErr = STATE.serverLoadError;
+            STATE.serverLoadError = j.load_state === "failed" ? (j.load_error || "Model load failed") : "";
+            if (j.load_state === "failed") {
+                markOffline();
+                if (prevErr !== STATE.serverLoadError) renderMessages();
+                return;
+            }
+            if (j.load_state === "loading") { markLoading(); return; }
+            if (j.running) {
+                const name = (j.model || "").split("/").pop().replace(/\.gguf$/i, "").slice(0, 32) || "Local";
+                markOnline(name);
+                if (prevErr) renderMessages();   // banner clears
+                return;
+            }
+        }
+    } catch (e) {}
+
+    // Fallback to old /v1/models probe
+    try {
+        const ctl = new AbortController();
+        const t = setTimeout(() => ctl.abort(), 3000);
+        const r = await fetch(url + "/v1/models", { signal: ctl.signal });
+        clearTimeout(t);
+        if (r.ok) {
+            const j = await r.json();
+            const id = j.data?.[0]?.id || "Local model";
+            const name = id.split("/").pop().replace(/\.gguf$/i, "").slice(0, 32);
+            markOnline(name);
+            return;
+        }
+    } catch (e) {}
+    markOffline();
+}
+function markOnline(name) {
+    STATE.serverOnline = true;
+    els.statusDot.classList.remove("off", "warn");
+    els.modelName.textContent = name;
+    STATE.modelName = name;
+}
+function markLoading() {
+    STATE.serverOnline = false;
+    els.statusDot.classList.remove("off");
+    els.statusDot.classList.add("warn");
+    els.modelName.textContent = "Loading model…";
+}
+function markOffline() {
+    STATE.serverOnline = false;
+    els.statusDot.classList.add("off");
+    els.statusDot.classList.remove("warn");
+    els.modelName.textContent = "Server offline";
+}
+function setupPolling() {
+    if (STATE.pollTimer) clearInterval(STATE.pollTimer);
+    refreshServerStatus();
+    const ms = Math.max(5, Number(STATE.settings.pollInt) || 30) * 1000;
+    STATE.pollTimer = setInterval(refreshServerStatus, ms);
+}
+
+// ============ Models list (uses control daemon /api/models) ============
+async function loadModelList() {
+    const list = $("#modelList");
+    const url = serverURL();
+    let html = "";
+    try {
+        const r = await fetch(url + "/api/models", { signal: AbortSignal.timeout?.(5000) });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const j = await r.json();
+        const items = j.models || [];
+        const current = j.current || "";
+        if (items.length === 0) {
+            html = `<div class="hint">No .gguf files found in any search directory.</div>`;
+            html += `<div class="hint" style="margin-top:8px">Searched:<br>${(j.search_dirs || []).map(d => `<code>${escapeHtml(d)}</code>`).join("<br>")}</div>`;
+        } else {
+            for (const m of items) {
+                const active = m.current ? "active" : "";
+                const tag = m.current ? `<div class="size" style="color: var(--accent);">● Currently loaded</div>` : `<div class="size">${m.size_mb} MB</div>`;
+                html += `<div class="model-card ${active}" onclick="selectModel('${m.path.replace(/'/g, "\\'")}', this)">
+                    <div class="name">${escapeHtml(m.name)}</div>
+                    <div class="path">${escapeHtml(m.path)}</div>
+                    ${tag}
+                </div>`;
+            }
+        }
+    } catch (e) {
+        html = `<div class="hint">⚠ Could not reach control API: ${escapeHtml(e.message || "")}. Open the chat URL from DSM (icon) for full functionality.</div>`;
+    }
+    list.innerHTML = html;
+}
+window.selectModel = async function(path, card) {
+    if (!confirm(`Switch to model:\n${path}\n\nResource settings (context size, GPU layers) will be auto-adjusted for the model size. The engine will restart and the chat will be briefly offline.`)) return;
+    document.querySelectorAll(".model-card").forEach(c => c.classList.remove("active"));
+    card.classList.add("active");
+    try {
+        const r = await fetch(serverURL() + "/api/select-model", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path })
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const j = await r.json();
+        if (j.applied_defaults && Object.keys(j.applied_defaults).length) {
+            const tip = Object.entries(j.applied_defaults).map(([k,v]) => `${k}=${v}`).join(", ");
+            console.info("Applied safe defaults:", tip);
+        }
+        markLoading();
+        setTimeout(() => { refreshServerStatus(); loadModelList(); }, 5000);
+    } catch (e) {
+        alert("Could not switch model: " + e.message);
+    }
+};
+
+async function applySafeDefaults() {
+    const status = document.getElementById("resApplyStatus");
+    if (!confirm("Auto-tune memory settings for the currently loaded model and restart the engine?")) return;
+    status.textContent = "Applying…";
+    try {
+        const r = await fetch(serverURL() + "/api/safe-defaults", { method: "POST" });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const j = await r.json();
+        const tip = Object.entries(j.applied || {}).map(([k,v]) => `${k}=${v}`).join(", ");
+        status.textContent = "✓ Applied: " + tip;
+        markLoading();
+        setTimeout(() => { refreshServerStatus(); loadResources(); }, 4000);
+    } catch (e) {
+        status.textContent = "✗ " + e.message;
+    }
+}
+
+// ============ Catalog & downloads ============
+let CATALOG_POLL = null;
+function fmtMB(mb) {
+    if (!mb) return "?";
+    if (mb >= 1024) return (mb / 1024).toFixed(1) + " GB";
+    return mb + " MB";
+}
+async function loadCatalog() {
+    const list = $("#catalogList");
+    try {
+        const r = await fetch(serverURL() + "/api/catalog");
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const j = await r.json();
+        list.innerHTML = j.models.map(m => `
+            <div class="model-card" style="display:flex; gap:12px; align-items:flex-start;">
+                <div style="flex:1; min-width:0;">
+                    <div class="name">${escapeHtml(m.name)} <span style="font-size:11px; color:var(--text-faint); margin-left:6px;">${m.family} · ${m.params}</span></div>
+                    <div class="size" style="margin: 4px 0 6px;">${fmtMB(m.size_mb)} on disk · ~${fmtMB(m.vram_mb)} VRAM</div>
+                    <div style="font-size:13px; color:var(--text-dim); line-height:1.5;">${escapeHtml(m.description)}</div>
+                    <div style="margin-top:6px;">${(m.tags||[]).map(t => `<span class="badge badge-user" style="margin-right:4px; padding:2px 8px; background:var(--bg-elev); border-radius:999px; font-size:11px;">${escapeHtml(t)}</span>`).join("")}</div>
+                </div>
+                <button class="btn btn-primary" data-dl-url="${escapeHtml(m.url)}" data-dl-name="${escapeHtml(m.filename)}">Download</button>
+            </div>
+        `).join("");
+        list.querySelectorAll("[data-dl-url]").forEach(b => {
+            b.addEventListener("click", () => startDownload(b.dataset.dlUrl, b.dataset.dlName, b));
+        });
+    } catch (e) {
+        list.innerHTML = `<div class="hint">⚠ ${escapeHtml(e.message)}</div>`;
+    }
+    loadDownloads();
+}
+async function loadDownloads() {
+    const box = $("#downloadsActive");
+    try {
+        const r = await fetch(serverURL() + "/api/downloads");
+        if (!r.ok) { box.innerHTML = ""; return; }
+        const j = await r.json();
+        const active = j.downloads.filter(d => d.status === "running" || d.status === "starting");
+        const recent = j.downloads.filter(d => d.status !== "running" && d.status !== "starting" && (Date.now()/1000 - (d.started||0)) < 300);
+        const all = [...active, ...recent];
+        if (all.length === 0) { box.innerHTML = ""; return; }
+        box.innerHTML = all.map(d => {
+            const pct = d.progress || 0;
+            const colour = d.status === "done" ? "var(--ok)" : d.status === "failed" ? "var(--danger)" : "var(--accent)";
+            const subtitle = d.status === "running"
+                ? `${fmtMB(Math.round(d.received/1024/1024))} / ${fmtMB(Math.round(d.total/1024/1024))} (${pct}%)`
+                : d.status === "done"
+                ? `Downloaded · saved as ${d.name}`
+                : d.status === "failed"
+                ? `Failed: ${escapeHtml(d.error || "")}`
+                : d.status;
+            return `<div class="model-card" style="margin-bottom:8px;">
+                <div class="name">${escapeHtml(d.name)}</div>
+                <div class="size">${subtitle}</div>
+                <div style="height: 6px; background: var(--border); border-radius: 3px; margin-top:6px; overflow:hidden;">
+                    <div style="height:100%; width:${pct}%; background:${colour}; transition: width .3s;"></div>
+                </div>
+            </div>`;
+        }).join("");
+        if (active.length === 0 && CATALOG_POLL) { clearInterval(CATALOG_POLL); CATALOG_POLL = null; loadModelList(); }
+    } catch (e) {}
+}
+async function startDownload(url, name, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = "Starting…"; }
+    try {
+        const r = await fetch(serverURL() + "/api/download-model", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ url, name })
+        });
+        if (!r.ok) { const t = await r.text(); throw new Error(t); }
+        if (btn) btn.textContent = "Queued";
+        if (!CATALOG_POLL) CATALOG_POLL = setInterval(loadDownloads, 1500);
+        loadDownloads();
+    } catch (e) {
+        alert("Download failed: " + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = "Download"; }
+    }
+}
+window.startCustomDownload = function() {
+    const url = $("#customUrl").value.trim();
+    const name = $("#customName").value.trim();
+    if (!url) return alert("Paste a URL first.");
+    startDownload(url, name);
+    $("#customUrl").value = ""; $("#customName").value = "";
+};
+
+// ============ Resources tab (server-side config) ============
+async function loadResources() {
+    try {
+        const r = await fetch(serverURL() + "/api/config", { signal: AbortSignal.timeout?.(3000) });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const c = await r.json();
+        $("#resCtxSize").value     = c.CTX_SIZE || "8192";
+        $("#resGpuLayers").value   = c.N_GPU_LAYERS || "999";
+        $("#resBatch").value       = c.BATCH_SIZE || "512";
+        $("#resUBatch").value      = c.UBATCH_SIZE || "256";
+        $("#resThreads").value     = c.THREADS || "4";
+        $("#resThreadsBatch").value= c.THREADS_BATCH || "4";
+        $("#resParallel").value    = c.PARALLEL || "1";
+        $("#resPort").value        = c.LISTEN_PORT || "8181";
+        $("#resMlock").checked     = c.USE_MLOCK === "1";
+        $("#resNoMmap").checked    = c.USE_NO_MMAP === "1";
+        $("#resExtra").value       = c.EXTRA_ARGS || "";
+        $("#resModelDirs").value   = c.MODEL_DIRS || "";
+        $("#resApplyStatus").textContent = "Loaded current settings.";
+    } catch (e) {
+        $("#resApplyStatus").textContent = "Could not load (" + (e.message || "") + ")";
+    }
+}
+async function applyResources() {
+    const status = $("#resApplyStatus");
+    status.textContent = "Saving…";
+    const data = {
+        CTX_SIZE:      $("#resCtxSize").value,
+        N_GPU_LAYERS:  $("#resGpuLayers").value,
+        BATCH_SIZE:    $("#resBatch").value,
+        UBATCH_SIZE:   $("#resUBatch").value,
+        THREADS:       $("#resThreads").value,
+        THREADS_BATCH: $("#resThreadsBatch").value,
+        PARALLEL:      $("#resParallel").value,
+        LISTEN_PORT:   $("#resPort").value,
+        USE_MLOCK:     $("#resMlock").checked ? "1" : "0",
+        USE_NO_MMAP:   $("#resNoMmap").checked ? "1" : "0",
+        EXTRA_ARGS:    $("#resExtra").value,
+        MODEL_DIRS:    $("#resModelDirs").value,
+    };
+    try {
+        const r = await fetch(serverURL() + "/api/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        status.textContent = "✓ Saved. Engine restarting…";
+        markLoading();
+        setTimeout(() => { refreshServerStatus(); status.textContent = "✓ Applied."; }, 4000);
+    } catch (e) {
+        status.textContent = "✗ Failed: " + e.message;
+    }
+}
+
+// ============ System tab ============
+async function loadSystemInfo() {
+    const out = $("#sysInfo");
+    try {
+        const r = await fetch(serverURL() + "/api/system", { signal: AbortSignal.timeout?.(3000) });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const s = await r.json();
+        const ramPct = s.ram_total_mb ? ((s.ram_used_mb / s.ram_total_mb) * 100).toFixed(1) : "?";
+        const g = s.gpu || {};
+        const gpuPct = g.vram_total_mb ? ((g.vram_used_mb / g.vram_total_mb) * 100).toFixed(1) : "?";
+        out.innerHTML = `
+            <div><strong>CPU</strong> · ${s.cpu_count || "?"} cores · load 1m: ${s.load_1m ?? "?"}</div>
+            <div><strong>RAM</strong> · ${s.ram_used_mb || 0} / ${s.ram_total_mb || 0} MB (${ramPct}%) · free ${s.ram_free_mb || 0} MB</div>
+            ${g.name ? `
+            <div><strong>GPU</strong> · ${escapeHtml(g.name)}</div>
+            <div>VRAM · ${g.vram_used_mb} / ${g.vram_total_mb} MB (${gpuPct}%)</div>
+            <div>Utilization · ${g.utilization}% · Temp · ${g.temperature}°C</div>
+            ` : `<div><strong>GPU</strong> · not detected via control daemon</div>`}
+        `;
+    } catch (e) {
+        out.textContent = "Could not load system info: " + e.message;
+    }
+}
+async function loadLog() {
+    const pre = $("#sysLog");
+    try {
+        const r = await fetch(serverURL() + "/api/log");
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        pre.textContent = await r.text();
+        pre.style.display = "block";
+        pre.scrollTop = pre.scrollHeight;
+    } catch (e) {
+        pre.textContent = "Could not load log: " + e.message;
+        pre.style.display = "block";
+    }
+}
+// ============ Providers ============
+const PROVIDER_LABELS = {
+    local:     { name: "Local (GPU)",  icon: "🖥️" },
+    openai:    { name: "ChatGPT",      icon: "🟢" },
+    anthropic: { name: "Claude",       icon: "🟠" },
+    gemini:    { name: "Gemini",       icon: "🔵" },
+};
+// ============ Agents (server-side, replaces hardcoded modes) ============
+// ============ Tools / Files / MCP menus (placeholders) ============
+function openToolsMenu() {
+    const tools = [
+        { id: "date",  label: (tStr("tools.insert_date")  || "📅 Insert today's date"), text: new Date().toLocaleDateString() },
+        { id: "time",  label: (tStr("tools.insert_time")  || "🕐 Insert current time"),  text: new Date().toLocaleTimeString() },
+        { id: "iso",   label: (tStr("tools.insert_iso")   || "📋 Insert ISO timestamp"),  text: new Date().toISOString() },
+        { id: "tplus", label: (tStr("tools.translate_template") || "🌐 Template: translate to…"), text: "Translate the following to {language}:\n\n" },
+        { id: "tcode", label: (tStr("tools.code_template") || "💻 Template: explain code"),  text: "Explain this code line-by-line:\n\n```\n\n```" },
+        { id: "tsum",  label: (tStr("tools.summary_template") || "📋 Template: summarize"),    text: "Summarize the following in 5 bullets:\n\n" },
+    ];
+    showSimpleMenu(tools, t => {
+        els.input.value = (els.input.value + (els.input.value ? "\n" : "") + t.text);
+        els.input.dispatchEvent(new Event("input"));
+        els.input.focus();
+    });
+}
+function openFilesMenu() {
+    alert((tStr("toolbar.files_soon") || "File attachments are coming in v1.3 (RAG per agent — upload PDFs / TXT / MD). For now, paste text directly into the message."));
+}
+function openMcpMenu() {
+    alert((tStr("toolbar.mcp_soon") || "MCP (Model Context Protocol) integration is on the roadmap for v1.3. It will let agents call external tools, file systems, and APIs via the standard MCP spec. See Settings → MCP for the upcoming config."));
+}
+function showSimpleMenu(items, onPick) {
+    // Lightweight inline modal
+    const back = document.createElement("div");
+    back.className = "modal-backdrop open";
+    back.innerHTML = `<div class="modal" style="max-width:380px;">
+        <div class="modal-head"><h2>${tStr("toolbar.tools") || "Tools"}</h2><button class="icon-btn">✕</button></div>
+        <div class="modal-body">${items.map(it => `<button class="btn" style="display:block; width:100%; text-align:left; margin-bottom:6px;" data-id="${it.id}">${it.label}</button>`).join("")}</div>
+    </div>`;
+    document.body.appendChild(back);
+    back.addEventListener("click", (e) => { if (e.target === back) back.remove(); });
+    back.querySelector(".icon-btn").addEventListener("click", () => back.remove());
+    back.querySelectorAll("[data-id]").forEach(b => b.addEventListener("click", () => {
+        const it = items.find(x => x.id === b.dataset.id);
+        if (it) onPick(it);
+        back.remove();
+    }));
+}
+
+async function loadAgents() {
+    try {
+        const r = await fetch(serverURL() + "/api/agents");
+        if (!r.ok) return;
+        const j = await r.json();
+        if (!Array.isArray(j.agents) || !j.agents.length) return;
+        // Map server agent shape to the existing mode shape
+        STATE.modes = j.agents.map(a => ({
+            id: a.id,
+            name: a.name,
+            icon: a.icon || "🤖",
+            system: a.system_prompt || "",
+            description: a.description || "",
+            tags: a.tags || [],
+            is_builtin: a.is_builtin,
+            model_path: a.model_path || "",
+            sampling: { temp: a.temperature, topP: a.top_p, topK: a.top_k, maxTok: a.max_tokens },
+            suggestions: [],
+        }));
+        if (!STATE.modes.find(m => m.id === STATE.modeId)) STATE.modeId = STATE.modes[0].id;
+        renderModes();
+        updateModePill();
+        renderAgentsTab();
+    } catch (e) {}
+}
+
+async function loadProvidersList() {
+    try {
+        const r = await fetch(serverURL() + "/api/providers");
+        if (!r.ok) return;
+        const j = await r.json();
+        STATE.providers = j.providers || {};
+        renderProviderSelect();
+    } catch (e) {}
+}
+function renderProviderSelect() {
+    const sel = document.getElementById("providerSelectBottom");
+    if (!sel) return;
+    const opts = [`<option value="local">🖥️ ${(window.tStr && window.tStr("toolbar.provider_local")) || "Local (GPU)"}</option>`];
+    for (const name of ["openai", "anthropic", "gemini"]) {
+        const p = STATE.providers[name];
+        if (p && p.enabled && (p.has_key || p.api_key)) {
+            const lbl = PROVIDER_LABELS[name];
+            opts.push(`<option value="${name}">${lbl.icon} ${lbl.name}</option>`);
+        }
+    }
+    sel.innerHTML = opts.join("");
+    sel.value = STATE.provider || "local";
+    renderModelSelectBottom();
+}
+function renderModelSelectBottom() {
+    const sel = document.getElementById("modelSelectBottom");
+    if (!sel) return;
+    const provider = STATE.provider || "local";
+    if (provider === "local") {
+        // Show local model display (single, read-only)
+        sel.innerHTML = `<option value="">${STATE.modelName || "(no model)"}</option>`;
+        sel.disabled = true;
+        return;
+    }
+    sel.disabled = false;
+    const p = STATE.providers[provider] || {};
+    const models = p.models || [];
+    const cur = STATE.providerModel || p.default_model || (models[0] || "");
+    sel.innerHTML = models.map(m =>
+        `<option value="${escapeHtml(m)}" ${m === cur ? "selected" : ""}>${escapeHtml(m)}</option>`
+    ).join("");
+}
+function renderAgentSelectBottom() {
+    const sel = document.getElementById("agentSelectBottom");
+    if (!sel) return;
+    sel.innerHTML = STATE.modes.map(m =>
+        `<option value="${m.id}" ${m.id === STATE.modeId ? "selected" : ""}>${m.icon} ${m.name}</option>`
+    ).join("");
+}
+async function renderProviderForms() {
+    const wrap = document.getElementById("providerForms");
+    if (!wrap) return;
+    if (!Object.keys(STATE.providers).length) await loadProvidersList();
+    const PROVIDER_HELP = {
+        openai: {
+            keyUrl:   "https://platform.openai.com/api-keys",
+            keyFmt:   "sk-…  (about 50 chars)",
+            consoleUrl: "https://platform.openai.com",
+            steps: [
+                tStr("providers.openai.step1") || "Sign in or create an OpenAI account.",
+                tStr("providers.openai.step2") || "Add a payment method under Billing (required — no free tier on API).",
+                tStr("providers.openai.step3") || "Open API keys → 'Create new secret key' → name it 'Filamind' → Copy.",
+                tStr("providers.openai.step4") || "Paste below, pick a default model (e.g. gpt-4o-mini for cheap, gpt-4o for quality)."
+            ],
+            pricing: tStr("providers.openai.pricing") || "gpt-4o-mini: $0.15 / 1M input · $0.60 / 1M output. gpt-4o: $2.50 / $10."
+        },
+        anthropic: {
+            keyUrl:   "https://console.anthropic.com/settings/keys",
+            keyFmt:   "sk-ant-api03-…  (about 108 chars)",
+            consoleUrl: "https://console.anthropic.com",
+            steps: [
+                tStr("providers.anthropic.step1") || "Sign in or create an Anthropic Console account.",
+                tStr("providers.anthropic.step2") || "Add credit ($5 minimum) under Billing — no free tier as of 2025.",
+                tStr("providers.anthropic.step3") || "Settings → API keys → 'Create Key' → name it → Copy. Starts with sk-ant-api03-",
+                tStr("providers.anthropic.step4") || "Paste below. claude-3-5-haiku-20241022 is the cheapest; claude-sonnet-4-5 is the best quality."
+            ],
+            pricing: tStr("providers.anthropic.pricing") || "Claude 3.5 Haiku: $0.80 / 1M input · $4 / 1M output. Sonnet: $3 / $15. Opus: $15 / $75."
+        },
+        gemini: {
+            keyUrl:   "https://aistudio.google.com/apikey",
+            keyFmt:   "AIzaSy…  (39 chars)",
+            consoleUrl: "https://aistudio.google.com",
+            steps: [
+                tStr("providers.gemini.step1") || "Sign in with a Google account at Google AI Studio.",
+                tStr("providers.gemini.step2") || "Open the link below → 'Create API key' → 'Create API key in new project'.",
+                tStr("providers.gemini.step3") || "Copy the key (starts with AIzaSy). It works on the FREE tier — no billing required to start.",
+                tStr("providers.gemini.step4") || "Paste below. Default: gemini-2.5-flash (good balance). gemini-2.5-flash-lite has the highest free quota."
+            ],
+            pricing: tStr("providers.gemini.pricing") || "FREE tier available: gemini-2.5-flash gives ~10 RPM and ~250 RPD. Paid: gemini-2.5-flash $0.10 / $0.40 per 1M."
+        }
+    };
+    let html = "";
+    for (const name of ["openai", "anthropic", "gemini"]) {
+        const p = STATE.providers[name] || {};
+        const lbl = PROVIDER_LABELS[name];
+        const help = PROVIDER_HELP[name];
+        const stepsHtml = help.steps.map((s, i) => `<li>${escapeHtml(s)}</li>`).join("");
+        html += `<div class="card" style="margin-bottom: 14px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                <h2 style="margin:0;">${lbl.icon} ${lbl.name}</h2>
+                <a href="${help.keyUrl}" target="_blank" rel="noopener" class="btn" style="padding:4px 10px; font-size:12px; text-decoration:none;">↗ ${tStr("providers.get_key") || "Get API key"}</a>
+            </div>
+            <details style="margin: 10px 0;">
+                <summary style="cursor:pointer; font-size:13px; color: var(--text-dim); font-weight:500;">${tStr("providers.how_to") || "How to get a key"}</summary>
+                <ol style="margin:8px 0 0; padding-left:22px; font-size:13px; line-height:1.7; color: var(--text-dim);">${stepsHtml}</ol>
+                <div class="hint" style="margin-top:8px;"><b>${tStr("providers.key_format") || "Key format"}:</b> <code>${help.keyFmt}</code></div>
+                <div class="hint"><b>${tStr("providers.pricing") || "Pricing"}:</b> ${escapeHtml(help.pricing)}</div>
+                <div class="hint"><b>${tStr("providers.console") || "Console"}:</b> <a href="${help.consoleUrl}" target="_blank" rel="noopener">${help.consoleUrl}</a></div>
+            </details>
+            <div class="field">
+                <label><input type="checkbox" data-prov="${name}" data-field="enabled" ${p.enabled ? "checked" : ""}> <span data-i18n="providers.enable">Enable</span></label>
+            </div>
+            <div class="field">
+                <label data-i18n="providers.api_key">API key</label>
+                <input type="password" data-prov="${name}" data-field="api_key" placeholder="${p.has_key ? ((tStr("providers.key_set_keep") || "(set — leave empty to keep)")) : (tStr("providers.paste_key") || "Paste your API key")}" autocomplete="off">
+            </div>
+            <div class="field">
+                <label><span data-i18n="providers.default_model">Default model</span> <button class="btn" style="padding:2px 8px; font-size:11px; margin-left:6px;" onclick="refreshProviderModels('${name}', this)">↻ ${tStr("providers.refresh_from_api") || "Refresh from API"}</button></label>
+                <input type="text" data-prov="${name}" data-field="default_model" value="${escapeHtml(p.default_model||"")}" list="models-${name}">
+                <datalist id="models-${name}">${(p.models||[]).map(m=>`<option value="${escapeHtml(m)}">`).join("")}</datalist>
+                <div class="hint">${(p.models||[]).length} ${tStr("providers.models_cached") || "models cached. Click Refresh after saving the key to fetch the live list."}</div>
+            </div>
+            <div class="field">
+                <label data-i18n="providers.base_url">Base URL <span style="font-weight:normal; color:var(--text-faint);">(advanced)</span></label>
+                <input type="text" data-prov="${name}" data-field="base_url" value="${escapeHtml(p.base_url||"")}" placeholder="${escapeHtml((PROVIDER_LABELS[name].name) + ' default')}">
+                <div class="hint">${tStr("providers.base_url_hint") || "Only change this for self-hosted gateways or proxies (e.g. LiteLLM, OpenRouter)."}</div>
+            </div>
+        </div>`;
+    }
+    wrap.innerHTML = html;
+}
+window.refreshProviderModels = async function(name, btn) {
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = "…";
+    try {
+        const r = await fetch(serverURL() + "/api/providers/" + name + "/refresh-models", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}"
+        });
+        const j = await r.json();
+        if (!r.ok) { alert((j.detail || j.error || "Failed").slice(0, 200)); return; }
+        btn.textContent = "✓ " + j.count;
+        await loadProvidersList();
+        renderProviderForms();
+    } catch (e) {
+        alert(e.message);
+    } finally {
+        setTimeout(() => { if (btn) btn.textContent = orig; btn.disabled = false; }, 1200);
+    }
+};
+
+async function saveProvidersForm() {
+    const status = document.getElementById("providersStatus");
+    status.textContent = "Saving…";
+    const out = {};
+    document.querySelectorAll("[data-prov]").forEach(el => {
+        const prov = el.dataset.prov, field = el.dataset.field;
+        if (!out[prov]) out[prov] = {};
+        if (el.type === "checkbox") out[prov][field] = el.checked;
+        else if (el.value) out[prov][field] = el.value.trim();
+    });
+    try {
+        const r = await fetch(serverURL() + "/api/providers", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(out)
+        });
+        if (!r.ok) { status.textContent = "✗ Save failed"; return; }
+        status.textContent = "✓ Saved";
+        await loadProvidersList();
+        renderProviderForms();
+    } catch (e) { status.textContent = "✗ " + e.message; }
+}
+function onProviderChange() {
+    const sel = document.getElementById("providerSelectBottom");
+    STATE.provider = sel.value || "local";
+    const p = STATE.providers[STATE.provider];
+    STATE.providerModel = p ? (p.default_model || "") : "";
+    const c = currentConv();
+    if (c) { c.provider = STATE.provider; c.providerModel = STATE.providerModel; }
+    save();
+    renderModelSelectBottom();
+    if (STATE.provider !== "local") {
+        markOnline((PROVIDER_LABELS[STATE.provider].name) + " · " + STATE.providerModel);
+    } else {
+        refreshServerStatus();
+    }
+}
+function onModelBottomChange() {
+    const sel = document.getElementById("modelSelectBottom");
+    STATE.providerModel = sel.value;
+    const c = currentConv();
+    if (c) c.providerModel = STATE.providerModel;
+    save();
+    if (STATE.provider !== "local") {
+        markOnline((PROVIDER_LABELS[STATE.provider].name) + " · " + STATE.providerModel);
+    }
+}
+function onAgentBottomChange() {
+    const sel = document.getElementById("agentSelectBottom");
+    setMode(sel.value);
+}
+
+async function runDiagnose() {
+    const out = $("#diagOut");
+    out.style.display = "block";
+    out.textContent = "Running diagnostic…";
+    try {
+        const r = await fetch(serverURL() + "/api/diagnose");
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const j = await r.json();
+        out.textContent = JSON.stringify(j, null, 2);
+    } catch (e) {
+        out.textContent = "Diagnostic failed: " + e.message;
+    }
+}
+
+// ============ Settings UI ============
+function openSettings() {
+    const s = STATE.settings;
+    $("#cfgSystem").value = s.system;
+    $("#cfgTemp").value = s.temp; $("#cfgTempVal").textContent = Number(s.temp).toFixed(2);
+    $("#cfgTopP").value = s.topP; $("#cfgTopPVal").textContent = Number(s.topP).toFixed(2);
+    $("#cfgTopK").value = s.topK;
+    $("#cfgMinP").value = s.minP; $("#cfgMinPVal").textContent = Number(s.minP).toFixed(2);
+    $("#cfgMaxTok").value = s.maxTok;
+    $("#cfgSeed").value = s.seed;
+    $("#cfgRepPen").value = s.repPen; $("#cfgRepPenVal").textContent = Number(s.repPen).toFixed(2);
+    $("#cfgRepN").value = s.repN;
+    $("#cfgFreqPen").value = s.freqPen; $("#cfgFreqPenVal").textContent = Number(s.freqPen).toFixed(2);
+    $("#cfgPresPen").value = s.presPen; $("#cfgPresPenVal").textContent = Number(s.presPen).toFixed(2);
+    $("#cfgStop").value = s.stop;
+    $("#cfgMirostat").value = s.mirostat;
+    $("#cfgMiroTau").value = s.miroTau;
+    $("#cfgMiroEta").value = s.miroEta;
+    $("#cfgServer").value = s.server;
+    $("#cfgPollInt").value = s.pollInt;
+    $("#cfgUseStream").checked = !!s.useStream;
+    renderAgentsTab();
+    loadModelList();
+    els.settingsModal.classList.add("open");
+}
+function closeSettings() { els.settingsModal.classList.remove("open"); }
+function saveSettings() {
+    const s = STATE.settings;
+    s.system  = $("#cfgSystem").value;
+    s.temp    = parseFloat($("#cfgTemp").value);
+    s.topP    = parseFloat($("#cfgTopP").value);
+    s.topK    = parseInt($("#cfgTopK").value);
+    s.minP    = parseFloat($("#cfgMinP").value);
+    s.maxTok  = parseInt($("#cfgMaxTok").value);
+    s.seed    = parseInt($("#cfgSeed").value);
+    s.repPen  = parseFloat($("#cfgRepPen").value);
+    s.repN    = parseInt($("#cfgRepN").value);
+    s.freqPen = parseFloat($("#cfgFreqPen").value);
+    s.presPen = parseFloat($("#cfgPresPen").value);
+    s.stop    = $("#cfgStop").value;
+    s.mirostat = parseInt($("#cfgMirostat").value);
+    s.miroTau = parseFloat($("#cfgMiroTau").value);
+    s.miroEta = parseFloat($("#cfgMiroEta").value);
+    s.server  = $("#cfgServer").value.trim();
+    s.pollInt = parseInt($("#cfgPollInt").value);
+    s.useStream = $("#cfgUseStream").checked;
+    save();
+    setupPolling();
+    closeSettings();
+}
+
+function renderAgentsTab() {
+    const c = document.getElementById("agentsList");
+    if (!c) return;
+    c.innerHTML = STATE.modes.map((m) => `
+        <div style="border:1px solid var(--border); padding:14px; border-radius:10px; margin-bottom:10px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                <span style="font-size:18px;">${m.icon}</span>
+                <strong>${escapeHtml(m.name)}</strong>
+                ${m.is_builtin ? '<span class="badge badge-user" style="font-size:10px;">built-in</span>' : '<span class="badge badge-admin" style="font-size:10px;">custom</span>'}
+                <span style="flex:1;"></span>
+                ${!m.is_builtin ? `<button class="btn" style="padding:4px 8px; font-size:12px;" onclick="deleteAgent('${m.id}')">Delete</button>` : ""}
+            </div>
+            <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">${escapeHtml(m.description || "")}</div>
+            <label style="font-size:12px; color:var(--text-faint);">System prompt</label>
+            <textarea class="agent-sys" data-id="${m.id}" style="width:100%; min-height:70px; margin-top:4px; padding:8px; border:1px solid var(--border-strong); border-radius:6px; background:var(--bg); color:var(--text); font:inherit; font-size:13px;">${escapeHtml(m.system)}</textarea>
+            <div class="field-row" style="margin-top:8px;">
+                <div class="field" style="margin-bottom:0;"><label style="font-size:11px;">Temperature</label><input type="number" class="agent-temp" data-id="${m.id}" value="${m.sampling.temp ?? 0.7}" step="0.05" min="0" max="2"></div>
+                <div class="field" style="margin-bottom:0;"><label style="font-size:11px;">Max tokens</label><input type="number" class="agent-max" data-id="${m.id}" value="${m.sampling.maxTok ?? 512}" min="32" max="32768"></div>
+                <div class="field" style="margin-bottom:0;"><label style="font-size:11px;">Save</label><button class="btn btn-primary" style="padding:6px 12px;" onclick="saveAgent('${m.id}')">Save</button></div>
+            </div>
+        </div>`).join("");
+}
+window.saveAgent = async function(id) {
+    const sys = document.querySelector(`.agent-sys[data-id="${id}"]`).value;
+    const temp = parseFloat(document.querySelector(`.agent-temp[data-id="${id}"]`).value);
+    const max = parseInt(document.querySelector(`.agent-max[data-id="${id}"]`).value);
+    try {
+        const r = await fetch(serverURL() + "/api/agents/" + encodeURIComponent(id), {
+            method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ system_prompt: sys, temperature: temp, max_tokens: max })
+        });
+        if (r.ok) { await loadAgents(); }
+    } catch (e) {}
+};
+window.deleteAgent = async function(id) {
+    if (!confirm("Delete this agent?")) return;
+    const r = await fetch(serverURL() + "/api/agents/" + encodeURIComponent(id), { method: "DELETE" });
+    if (r.ok) await loadAgents();
+};
+async function createNewAgent() {
+    const status = document.getElementById("newAgentStatus");
+    const body = {
+        id:    document.getElementById("newAgentId").value.trim(),
+        name:  document.getElementById("newAgentName").value.trim(),
+        icon:  document.getElementById("newAgentIcon").value || "🤖",
+        description: document.getElementById("newAgentDesc").value.trim(),
+        system_prompt: document.getElementById("newAgentSys").value,
+        temperature: parseFloat(document.getElementById("newAgentTemp").value || "0.7"),
+        max_tokens: parseInt(document.getElementById("newAgentMax").value || "512"),
+    };
+    if (!body.id || !body.name) { status.textContent = "ID and name required."; return; }
+    status.textContent = "Creating…";
+    try {
+        const r = await fetch(serverURL() + "/api/agents", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        });
+        const j = await r.json();
+        if (!r.ok) { status.textContent = "✗ " + (j.error || "failed"); return; }
+        status.textContent = "✓ Created";
+        ["newAgentId","newAgentName","newAgentDesc","newAgentSys"].forEach(k => document.getElementById(k).value = "");
+        await loadAgents();
+    } catch (e) { status.textContent = "✗ " + e.message; }
+}
+
+// ============ Export ============
+async function exportCurrentConv() {
+    const conv = currentConv();
+    if (!conv || !conv.messages.length) {
+        alert(tStr("actions.no_conversation") || "No active conversation."); return;
+    }
+    const choice = prompt(
+        tStr("confirms.export_format") || "Export as 'md' (markdown) or 'json'?",
+        "md");
+    if (!choice) return;
+    const fmt = choice.toLowerCase().includes("json") ? "json" : "markdown";
+    try {
+        const r = await fetch(serverURL() + "/api/export-conv", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                format: fmt,
+                title:  conv.title || "Conversation",
+                messages: conv.messages.map(m => ({ role: m.role, content: m.content })),
+            })
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = (conv.title || "conversation").replace(/[^A-Za-z0-9_\-؀-ۿ]+/g, "_").slice(0, 60)
+                     + (fmt === "json" ? ".json" : ".md");
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+    } catch (e) {
+        alert((tStr("errors.export_failed") || "Export failed: ") + e.message);
+    }
+}
+
+// ============ Voice input ============
+function setupVoiceInput() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const btn = document.getElementById("btnMic");
+    if (!SR || !btn) return;
+    btn.style.display = "";
+    let rec = null;
+    let listening = false;
+    btn.addEventListener("click", () => {
+        if (listening) {
+            try { rec && rec.stop(); } catch (e) {}
+            return;
+        }
+        rec = new SR();
+        rec.lang = (localStorage.getItem("filamindai_lang") || "en") === "ar" ? "ar-SA" : "en-US";
+        rec.interimResults = true;
+        rec.continuous = false;
+        rec.onresult = (e) => {
+            let txt = "";
+            for (let i = e.resultIndex; i < e.results.length; i++) txt += e.results[i][0].transcript;
+            const cur = els.input.value;
+            els.input.value = (cur && !cur.endsWith(" ") ? cur + " " : cur) + txt;
+            els.input.dispatchEvent(new Event("input"));
+        };
+        rec.onstart = () => { listening = true; btn.style.color = "var(--danger)"; };
+        rec.onend   = () => { listening = false; btn.style.color = ""; };
+        rec.onerror = () => { listening = false; btn.style.color = ""; };
+        try { rec.start(); } catch (e) {}
+    });
+}
+
+// ============ Slash commands ============
+function expandSlashCommand(text) {
+    const SLASH = {
+        "/summarize": "Please summarize the following clearly in bullet points:\n",
+        "/translate": "Please translate the following. If no target language is specified, ask first:\n",
+        "/explain":   "Please explain in simple terms:\n",
+        "/improve":   "Please rewrite the following more clearly and concisely:\n",
+        "/code":      "Write code for the following task. Use Markdown code fences and brief comments only where non-obvious:\n",
+        "/brainstorm":"Give me 7 diverse ideas about:\n",
+    };
+    const m = text.match(/^(\/[a-z]+)\s+([\s\S]+)$/i);
+    if (!m) return text;
+    const prefix = SLASH[m[1].toLowerCase()];
+    if (!prefix) return text;
+    return prefix + m[2];
+}
+
+// ============ Misc ============
+function toggleTheme() {
+    STATE.settings.theme = STATE.settings.theme === "light" ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", STATE.settings.theme);
+    save();
+}
+window.copyMessage = async function(btn) {
+    const content = btn.closest(".msg-body").querySelector(".msg-content").innerText;
+    const ok = await copyToClipboardSafe(content);
+    const orig = btn.innerHTML;
+    btn.innerHTML = ok ? "✓ Copied" : "✗ Failed";
+    setTimeout(() => btn.innerHTML = orig, 1200);
+};
+window.switchConv = switchConv;
+window.deleteConv = deleteConv;
+window.setMode = setMode;
+window.closeSettings = closeSettings;
+window.saveSettings = saveSettings;
+
+// ============ i18n ============
+async function loadLang() {
+    const lang = localStorage.getItem("filamindai_lang") || "en";
+    try {
+        const r = await fetch("/api/i18n?lang=" + encodeURIComponent(lang));
+        window.I18N = r.ok ? await r.json() : {};
+    } catch { window.I18N = {}; }
+    applyI18nDom();
+    const btn = document.getElementById("btnLang");
+    if (btn) btn.textContent = lang === "ar" ? "عربي" : "EN";
+    // Apply translated mode names
+    STATE.modes.forEach(m => {
+        const k = "chat.modes." + m.id;
+        const tr = tStr(k);
+        if (tr) m.name = tr;
+    });
+    renderModes();
+    updateModePill();
+    if (currentConv() && currentConv().messages.length === 0) renderMessages();
+}
+function tStr(key) {
+    const parts = key.split(".");
+    let cur = window.I18N || {};
+    for (const p of parts) {
+        if (cur && typeof cur === "object" && p in cur) cur = cur[p];
+        else return null;
+    }
+    return typeof cur === "string" ? cur : null;
+}
+window.tStr = tStr;
+function applyI18nDom() {
+    document.querySelectorAll("[data-i18n]").forEach(el => {
+        const v = tStr(el.dataset.i18n);
+        if (v) el.textContent = v;
+    });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+        const v = tStr(el.dataset.i18nPlaceholder);
+        if (v) el.placeholder = v;
+    });
+    document.querySelectorAll("[data-i18n-title]").forEach(el => {
+        const v = tStr(el.dataset.i18nTitle);
+        if (v) el.title = v;
+    });
+    const ph = tStr("chat.placeholder");
+    if (ph) document.getElementById("inputBox").placeholder = ph;
+    const np = tStr("chat.new_chat");
+    if (np) document.querySelector("#btnNewChat span").textContent = np;
+}
+function toggleLang() {
+    const cur = localStorage.getItem("filamindai_lang") || "en";
+    const next = cur === "ar" ? "en" : "ar";
+    localStorage.setItem("filamindai_lang", next);
+    location.reload();
+}
+
+// ============ User menu ============
+function setupUserMenu(me) {
+    document.getElementById("meName").textContent = me.display_name || me.username;
+    document.getElementById("meRole").textContent = me.role;
+    document.getElementById("meAvatar").textContent = (me.display_name || me.username)[0].toUpperCase();
+    if (me.role === "admin") document.getElementById("meAdminLink").style.display = "block";
+    const menu = document.getElementById("userMenu");
+    menu.addEventListener("click", (e) => {
+        e.stopPropagation();
+        menu.classList.toggle("open");
+    });
+    document.addEventListener("click", () => menu.classList.remove("open"));
+    document.getElementById("meLogout").addEventListener("click", async (e) => {
+        e.preventDefault();
+        await fetch("/api/auth/logout", { method: "POST" });
+        location.href = "/login.html";
+    });
+    document.getElementById("btnLang").addEventListener("click", toggleLang);
+}
+
+// ============ Init ============
+function init() {
+    load();
+    document.documentElement.setAttribute("data-theme", STATE.settings.theme || "light");
+    if (window.__ME) setupUserMenu(window.__ME);
+    if (window.__DAEMON_VERSION) {
+        const f = document.getElementById("footVersion");
+        if (f) f.textContent = "· daemon " + window.__DAEMON_VERSION;
+    }
+    loadLang();
+
+    els.input.addEventListener("input", () => {
+        els.input.style.height = "auto";
+        els.input.style.height = Math.min(els.input.scrollHeight, 180) + "px";
+        updateSendButton();
+    });
+    els.input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            if (STATE.streaming) stopGeneration();
+            else sendMessage();
+        }
+    });
+    els.send.addEventListener("click", () => {
+        if (STATE.streaming) stopGeneration();
+        else sendMessage();
+    });
+    els.newChat.addEventListener("click", newConversation);
+    els.settings.addEventListener("click", openSettings);
+    els.themeBtn.addEventListener("click", toggleTheme);
+    els.toggleSidebar.addEventListener("click", () => els.sidebar.classList.toggle("hidden"));
+    // Search box
+    const searchEl = document.getElementById("convSearch");
+    if (searchEl) searchEl.addEventListener("input", (e) => {
+        STATE.convSearch = e.target.value;
+        renderConvList();
+    });
+    // Export current conversation
+    document.getElementById("btnExport").addEventListener("click", exportCurrentConv);
+    // Voice input (Web Speech API)
+    setupVoiceInput();
+
+    els.regen.addEventListener("click", () => {
+        const conv = currentConv();
+        if (!conv || conv.messages.length < 2 || STATE.streaming) return;
+        const last = conv.messages.pop();
+        if (last.role !== "assistant") { conv.messages.push(last); return; }
+        const userMsg = conv.messages.pop();
+        if (userMsg.role !== "user") { conv.messages.push(userMsg); conv.messages.push(last); return; }
+        els.input.value = userMsg.content;
+        save();
+        renderMessages();
+        sendMessage();
+    });
+
+    // Slider live updates
+    document.querySelectorAll("#cfgTemp,#cfgTopP,#cfgMinP,#cfgRepPen,#cfgFreqPen,#cfgPresPen").forEach(el => {
+        el.addEventListener("input", () => {
+            document.getElementById(el.id + "Val").textContent = Number(el.value).toFixed(2);
+        });
+    });
+    // Modal backdrop
+    els.settingsModal.addEventListener("click", (e) => { if (e.target === els.settingsModal) closeSettings(); });
+    // Tabs
+    document.querySelectorAll(".tab").forEach(t => {
+        t.addEventListener("click", () => {
+            document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+            document.querySelectorAll(".tab-content").forEach(x => x.classList.remove("active"));
+            t.classList.add("active");
+            document.querySelector(`[data-tab-content="${t.dataset.tab}"]`).classList.add("active");
+            if (t.dataset.tab === "models") { loadModelList(); loadCatalog(); }
+            if (t.dataset.tab === "resources") loadResources();
+            if (t.dataset.tab === "system") loadSystemInfo();
+            if (t.dataset.tab === "providers") renderProviderForms();
+            if (t.dataset.tab === "modes") renderAgentsTab();
+        });
+    });
+    // Resource apply button
+    document.getElementById("btnApplyResources").addEventListener("click", applyResources);
+    document.getElementById("btnSafeDefaults").addEventListener("click", applySafeDefaults);
+    document.getElementById("btnRefreshSys").addEventListener("click", loadSystemInfo);
+    document.getElementById("btnShowLog").addEventListener("click", loadLog);
+    document.getElementById("btnDiagnose").addEventListener("click", runDiagnose);
+    document.getElementById("btnForceRestart").addEventListener("click", async () => {
+        if (!confirm("Kill the inference engine and start it fresh? In-flight requests will be lost.")) return;
+        await fetch(serverURL() + "/api/restart", { method: "POST" });
+        markLoading();
+        setTimeout(refreshServerStatus, 4000);
+    });
+    document.getElementById("btnSaveProviders").addEventListener("click", saveProvidersForm);
+    document.getElementById("providerSelectBottom").addEventListener("change", onProviderChange);
+    document.getElementById("modelSelectBottom").addEventListener("change", onModelBottomChange);
+    document.getElementById("agentSelectBottom").addEventListener("change", onAgentBottomChange);
+    document.getElementById("btnToolsBottom").addEventListener("click", openToolsMenu);
+    document.getElementById("btnFilesBottom").addEventListener("click", openFilesMenu);
+    document.getElementById("btnMcpBottom").addEventListener("click", openMcpMenu);
+
+    renderModes();
+    updateModePill();
+    loadProvidersList();
+    loadAgents();
+    const ca = document.getElementById("btnCreateAgent");
+    if (ca) ca.addEventListener("click", createNewAgent);
+
+    if (STATE.convs.length === 0) {
+        newConversation();
+    } else {
+        if (!STATE.currentId || !currentConv()) STATE.currentId = STATE.convs[0].id;
+        renderConvList();
+        renderMessages();
+    }
+    setupPolling();
+}
+init();
+</script>
+</body>
+</html>

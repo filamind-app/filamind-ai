@@ -1,0 +1,17 @@
+{
+  ".url": {
+    "SYNO.SDS.FilamindAI.Application": {
+      "type": "url",
+      "protocol": "http",
+      "port": "8181",
+      "url": "/",
+      "allowAltPort": true,
+      "title": "Filamind AI",
+      "desc": "Local LLM chat powered by the NVIDIA GPU on your DVA 3221.",
+      "icon": "images/FilamindAI-{0}.png",
+      "allUsers": true,
+      "grantPrivilege": "all",
+      "advanceGrantPrivilege": true
+    }
+  }
+}

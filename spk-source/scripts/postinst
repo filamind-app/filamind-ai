@@ -1,0 +1,56 @@
+#!/bin/sh
+INSTALL_DIR="/var/packages/${SYNOPKG_PKGNAME}/target"
+ETC_DIR="/var/packages/${SYNOPKG_PKGNAME}/etc"
+CONFIG_FILE="${ETC_DIR}/filamindai.conf"
+
+mkdir -p "${INSTALL_DIR}/var" "${INSTALL_DIR}/models" "${ETC_DIR}"
+[ ! -d /volume1/FilamindAI/models ] && mkdir -p /volume1/FilamindAI/models 2>/dev/null || true
+
+# Backward-compat: if user has a SaynologyAI install with config + data, import it
+LEGACY_ETC="/var/packages/SaynologyAI/etc"
+if [ -d "${LEGACY_ETC}" ] && [ ! -f "${CONFIG_FILE}" ]; then
+    cp -an "${LEGACY_ETC}/saynologyai.conf"  "${CONFIG_FILE}"             2>/dev/null || true
+    cp -an "${LEGACY_ETC}/users.db"          "${ETC_DIR}/users.db"        2>/dev/null || true
+    cp -an "${LEGACY_ETC}/agents.db"         "${ETC_DIR}/agents.db"       2>/dev/null || true
+    cp -an "${LEGACY_ETC}/providers.json"    "${ETC_DIR}/providers.json"  2>/dev/null || true
+    cp -an "${LEGACY_ETC}/secret.key"        "${ETC_DIR}/secret.key"      2>/dev/null || true
+fi
+
+WIZ_MODEL_PATH="${wizard_model_path:-}"
+WIZ_PORT="${wizard_port:-8181}"
+
+# Only create a fresh config if migration didn't already supply one
+if [ ! -f "${CONFIG_FILE}" ]; then
+cat > "${CONFIG_FILE}" <<EOF
+# Filamind AI configuration
+# This file is managed by the chat UI (Settings → Resources).
+# Manual edits are preserved across restarts of the package itself, but the UI
+# will overwrite this file when you save changes through Settings.
+
+# ── Model location ────────────────────────────────────────────────────
+MODEL_PATH="${WIZ_MODEL_PATH}"
+MODEL_DIRS=""
+
+# ── Server ────────────────────────────────────────────────────────────
+LISTEN_HOST="0.0.0.0"
+LISTEN_PORT="${WIZ_PORT}"
+PARALLEL="1"
+
+# ── Performance / memory ──────────────────────────────────────────────
+N_GPU_LAYERS="999"
+CTX_SIZE="8192"
+BATCH_SIZE="512"
+UBATCH_SIZE="256"
+THREADS="4"
+THREADS_BATCH="4"
+USE_MLOCK="0"
+USE_NO_MMAP="1"
+EXTRA_ARGS=""
+EOF
+fi
+
+chmod 644 "${CONFIG_FILE}"
+chmod +x "${INSTALL_DIR}/bin/llama-server" "${INSTALL_DIR}/bin/llama-main" "${INSTALL_DIR}/bin/control_daemon.py" 2>/dev/null || true
+chown -R ${SYNOPKG_PKGNAME}:${SYNOPKG_PKGNAME} "${INSTALL_DIR}/var" "${INSTALL_DIR}/models" "${ETC_DIR}" 2>/dev/null || true
+
+exit 0

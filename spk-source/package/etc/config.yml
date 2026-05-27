@@ -1,0 +1,6 @@
+# Filamind AI runtime configuration (shell-sourceable)
+MODEL_FILE="${INSTALL_DIR}/models/default.gguf"
+LISTEN_HOST="0.0.0.0"
+LISTEN_PORT="8181"
+N_GPU_LAYERS="999"
+CTX_SIZE="4096"

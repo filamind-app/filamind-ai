@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Filamind AI · Profile</title>
+<link rel="stylesheet" href="/auth-common.css">
+</head>
+<body>
+<div class="app-header">
+    <div class="brand">
+        <span class="brand-mark">F</span>
+        <span>Filamind AI</span>
+    </div>
+    <div class="nav">
+        <a href="/index.html" data-i18n="app.chat">Chat</a>
+        <a href="/profile.html" class="active" data-i18n="app.profile">Profile</a>
+        <a href="/admin.html" id="adminLink" style="display:none" data-i18n="app.admin">Admin</a>
+    </div>
+    <div class="spacer"></div>
+    <button class="lang-pill" id="langBtn">EN</button>
+    <div class="user-pill"><span class="avatar" id="userAv">U</span><span id="userName">…</span></div>
+    <button class="btn" id="logoutBtn" data-i18n="app.logout">Sign out</button>
+</div>
+
+<div class="page-shell">
+    <h1 data-i18n="profile.title">Your profile</h1>
+
+    <div class="card">
+        <h2 data-i18n="profile.title">Profile</h2>
+        <div id="profileAlert"></div>
+        <form id="profileForm">
+            <div class="field">
+                <label data-i18n="profile.display_name">Display name</label>
+                <input type="text" id="display_name">
+            </div>
+            <div class="field">
+                <label data-i18n="profile.language">Language</label>
+                <select id="language">
+                    <option value="en">English</option>
+                    <option value="ar">العربية</option>
+                </select>
+            </div>
+            <div class="field">
+                <label data-i18n="profile.theme">Theme</label>
+                <select id="theme">
+                    <option value="light" data-i18n="profile.theme_light">Light</option>
+                    <option value="dark" data-i18n="profile.theme_dark">Dark</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary" data-i18n="profile.save_profile">Save profile</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2 data-i18n="profile.change_password">Change password</h2>
+        <div id="pwAlert"></div>
+        <form id="pwForm">
+            <div class="field">
+                <label data-i18n="profile.old_password">Current password</label>
+                <input type="password" id="oldPw" required>
+            </div>
+            <div class="field">
+                <label data-i18n="profile.new_password">New password</label>
+                <input type="password" id="newPw" required minlength="6">
+            </div>
+            <button type="submit" class="btn btn-primary" data-i18n="profile.update_password">Update password</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2 data-i18n="profile.connection_title">Connection details</h2>
+        <p class="card-desc" data-i18n="profile.connection_desc">Plug these values into any OpenAI-compatible client (OpenWebUI, LibreChat, Continue, Cursor, LangChain, OpenAI SDK …) to call this NAS as a drop-in OpenAI endpoint.</p>
+
+        <div class="conn-grid">
+            <div class="conn-row">
+                <label data-i18n="profile.base_url">Base URL</label>
+                <div class="copy-line">
+                    <code id="baseUrl">—</code>
+                    <button class="btn-icon" data-copy-target="baseUrl" data-i18n="profile.copy">Copy</button>
+                </div>
+                <div class="hint" data-i18n="profile.base_url_hint">Most clients call this the "API base URL" or "endpoint URL". It already includes the /v1 prefix.</div>
+            </div>
+
+            <div class="conn-row">
+                <label data-i18n="profile.auth_header">Authorization header</label>
+                <div class="copy-line">
+                    <code id="authHeader">Authorization: Bearer YOUR_API_KEY</code>
+                    <button class="btn-icon" data-copy-target="authHeader" data-i18n="profile.copy">Copy</button>
+                </div>
+                <div class="hint" data-i18n="profile.auth_header_hint">Replace YOUR_API_KEY with a key from the section below. Format: sk-… (45+ chars).</div>
+            </div>
+
+            <div class="conn-row">
+                <label data-i18n="profile.endpoints">Endpoints</label>
+                <div class="copy-line">
+                    <code id="endpointChat">.../v1/chat/completions</code>
+                    <button class="btn-icon" data-copy-target="endpointChat" data-i18n="profile.copy">Copy</button>
+                </div>
+                <div class="copy-line">
+                    <code id="endpointModels">.../v1/models</code>
+                    <button class="btn-icon" data-copy-target="endpointModels" data-i18n="profile.copy">Copy</button>
+                </div>
+                <div class="copy-line">
+                    <code id="endpointCompletions">.../v1/completions</code>
+                    <button class="btn-icon" data-copy-target="endpointCompletions" data-i18n="profile.copy">Copy</button>
+                </div>
+            </div>
+
+            <div class="conn-row">
+                <label data-i18n="profile.default_model">Default model parameter</label>
+                <div class="copy-line">
+                    <code id="defaultModel">auto</code>
+                    <button class="btn-icon" data-copy-target="defaultModel" data-i18n="profile.copy">Copy</button>
+                </div>
+                <div class="hint" data-i18n="profile.default_model_hint">Use "auto" to let the daemon pick the active local model. Cloud providers expect their own model IDs (e.g. gpt-4o, claude-sonnet-4, gemini-2.5-flash).</div>
+            </div>
+        </div>
+
+        <h3 class="snippets-title" data-i18n="profile.code_examples">Code examples</h3>
+
+        <details class="snippet">
+            <summary><span data-i18n="profile.snippet_curl">curl</span></summary>
+            <pre><code id="snippetCurl"></code></pre>
+            <div class="snippet-actions">
+                <button class="btn btn-sm" data-copy-target="snippetCurl" data-i18n="profile.copy">Copy</button>
+            </div>
+        </details>
+
+        <details class="snippet">
+            <summary><span data-i18n="profile.snippet_python">Python (OpenAI SDK)</span></summary>
+            <pre><code id="snippetPython"></code></pre>
+            <div class="snippet-actions">
+                <button class="btn btn-sm" data-copy-target="snippetPython" data-i18n="profile.copy">Copy</button>
+            </div>
+        </details>
+
+        <details class="snippet">
+            <summary><span data-i18n="profile.snippet_js">JavaScript (OpenAI SDK)</span></summary>
+            <pre><code id="snippetJs"></code></pre>
+            <div class="snippet-actions">
+                <button class="btn btn-sm" data-copy-target="snippetJs" data-i18n="profile.copy">Copy</button>
+            </div>
+        </details>
+
+        <details class="snippet">
+            <summary><span data-i18n="profile.snippet_langchain">LangChain (Python)</span></summary>
+            <pre><code id="snippetLangchain"></code></pre>
+            <div class="snippet-actions">
+                <button class="btn btn-sm" data-copy-target="snippetLangchain" data-i18n="profile.copy">Copy</button>
+            </div>
+        </details>
+
+        <details class="snippet">
+            <summary><span data-i18n="profile.snippet_openwebui">OpenWebUI / LibreChat config</span></summary>
+            <pre><code id="snippetOpenwebui"></code></pre>
+            <div class="snippet-actions">
+                <button class="btn btn-sm" data-copy-target="snippetOpenwebui" data-i18n="profile.copy">Copy</button>
+            </div>
+        </details>
+
+        <div class="tools-chips">
+            <span class="chip-label" data-i18n="profile.compatible_tools">Compatible tools:</span>
+            <span class="chip">OpenWebUI</span>
+            <span class="chip">LibreChat</span>
+            <span class="chip">Continue.dev</span>
+            <span class="chip">Cursor</span>
+            <span class="chip">LangChain</span>
+            <span class="chip">LlamaIndex</span>
+            <span class="chip">AnythingLLM</span>
+            <span class="chip">Jan</span>
+            <span class="chip">Msty</span>
+            <span class="chip">BoltAI</span>
+            <span class="chip">ChatBox</span>
+            <span class="chip">TypingMind</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 data-i18n="profile.api_keys">API keys</h2>
+        <p class="card-desc" data-i18n="profile.api_keys_desc">Generate keys for programmatic access. Use them as Bearer tokens against the /v1/ endpoints above.</p>
+        <div id="keysList"></div>
+        <form id="keyForm" style="margin-top: 16px;">
+            <div class="field">
+                <label data-i18n="profile.new_key_name">Key name</label>
+                <input type="text" id="keyName" placeholder="my-script">
+                <div class="hint" data-i18n="profile.new_key_hint">Choose a label so you can revoke individual keys later (e.g. "Cursor", "n8n", "Home Assistant").</div>
+            </div>
+            <button type="submit" class="btn btn-primary" data-i18n="profile.create_key">Create key</button>
+        </form>
+        <div id="newKeyBox"></div>
+    </div>
+</div>
+
+<script src="/i18n.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+let me;
+
+async function checkAuth() {
+    const r = await fetch("/api/auth/status");
+    const j = await r.json();
+    if (!j.authenticated) { location.href = "/login.html"; return; }
+    me = j.user;
+    $("#userName").textContent = me.display_name;
+    $("#userAv").textContent = (me.display_name || me.username)[0].toUpperCase();
+    if (me.role === "admin") $("#adminLink").style.display = "";
+    $("#display_name").value = me.display_name || "";
+    $("#language").value = me.language || "en";
+    $("#theme").value = me.theme || "light";
+}
+
+$("#profileForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const al = $("#profileAlert"); al.innerHTML = "";
+    const r = await fetch("/api/profile", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+            display_name: $("#display_name").value.trim(),
+            language: $("#language").value,
+            theme: $("#theme").value
+        })
+    });
+    if (r.ok) {
+        al.innerHTML = `<div class="alert alert-ok">${window.t("profile.saved")||"Saved."}</div>`;
+        localStorage.setItem("filamindai_lang", $("#language").value);
+        localStorage.setItem("filamindai_theme", $("#theme").value);
+        setTimeout(() => location.reload(), 600);
+    } else {
+        const j = await r.json();
+        al.innerHTML = `<div class="alert alert-error">${j.error || "error"}</div>`;
+    }
+});
+
+$("#pwForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const al = $("#pwAlert"); al.innerHTML = "";
+    const r = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+            old_password: $("#oldPw").value,
+            new_password: $("#newPw").value
+        })
+    });
+    const j = await r.json();
+    if (r.ok) {
+        al.innerHTML = `<div class="alert alert-ok">${window.t("profile.password_updated")||"Password updated."}</div>`;
+        $("#pwForm").reset();
+    } else {
+        let msg = j.error;
+        if (j.error === "wrong_old_password") msg = window.t("profile.wrong_password");
+        else if (j.error === "weak_password") msg = window.t("profile.weak_password");
+        al.innerHTML = `<div class="alert alert-error">${msg || j.error}</div>`;
+    }
+});
+
+const BASE_URL = `${location.protocol}//${location.host}/v1`;
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+// Works over HTTP (LAN) where navigator.clipboard is unavailable.
+// Tries the modern API first, then falls back to a hidden textarea + execCommand.
+async function copyToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        try { await navigator.clipboard.writeText(text); return true; } catch (_) {}
+    }
+    try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:none;outline:none;background:transparent;opacity:0;";
+        document.body.appendChild(ta);
+        const sel = document.getSelection();
+        const prevRange = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, ta.value.length);
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        if (prevRange) { sel.removeAllRanges(); sel.addRange(prevRange); }
+        return ok;
+    } catch (e) {
+        return false;
+    }
+}
+
+function flashCopyButton(btn, ok) {
+    const orig = btn.textContent;
+    btn.textContent = ok ? "✓" : "✗";
+    btn.classList.toggle("copied", ok);
+    btn.classList.toggle("copy-failed", !ok);
+    setTimeout(() => {
+        btn.textContent = orig;
+        btn.classList.remove("copied", "copy-failed");
+    }, 1400);
+}
+
+function renderConnection() {
+    $("#baseUrl").textContent = BASE_URL;
+    $("#authHeader").textContent = "Authorization: Bearer YOUR_API_KEY";
+    $("#endpointChat").textContent = `${BASE_URL}/chat/completions`;
+    $("#endpointModels").textContent = `${BASE_URL}/models`;
+    $("#endpointCompletions").textContent = `${BASE_URL}/completions`;
+    $("#defaultModel").textContent = "auto";
+
+    $("#snippetCurl").textContent =
+`curl ${BASE_URL}/chat/completions \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "auto",
+    "messages": [
+      {"role": "user", "content": "Hello!"}
+    ],
+    "max_tokens": 256
+  }'`;
+
+    $("#snippetPython").textContent =
+`# pip install openai
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="${BASE_URL}",
+    api_key="YOUR_API_KEY",
+)
+
+resp = client.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(resp.choices[0].message.content)`;
+
+    $("#snippetJs").textContent =
+`// npm i openai
+import OpenAI from "openai";
+
+const client = new OpenAI({
+    baseURL: "${BASE_URL}",
+    apiKey: "YOUR_API_KEY",
+});
+
+const resp = await client.chat.completions.create({
+    model: "auto",
+    messages: [{ role: "user", content: "Hello!" }],
+});
+console.log(resp.choices[0].message.content);`;
+
+    $("#snippetLangchain").textContent =
+`# pip install langchain-openai
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    base_url="${BASE_URL}",
+    api_key="YOUR_API_KEY",
+    model="auto",
+)
+
+print(llm.invoke("Hello!").content)`;
+
+    $("#snippetOpenwebui").textContent =
+`OpenWebUI → Settings → Connections → OpenAI API
+  • API Base URL: ${BASE_URL}
+  • API Key:      YOUR_API_KEY
+
+LibreChat (librechat.yaml):
+  endpoints:
+    custom:
+      - name: "Filamind AI"
+        apiKey: "YOUR_API_KEY"
+        baseURL: "${BASE_URL}"
+        models:
+          default: ["auto"]
+          fetch: true
+
+Continue.dev (~/.continue/config.json):
+  "models": [{
+    "title": "Filamind AI",
+    "provider": "openai",
+    "model": "auto",
+    "apiBase": "${BASE_URL}",
+    "apiKey": "YOUR_API_KEY"
+  }]
+
+Cursor → Settings → Models → Override OpenAI Base URL:
+  ${BASE_URL}`;
+}
+
+function buildCurlTemplate(prefix) {
+    return `curl ${BASE_URL}/chat/completions \\
+  -H "Authorization: Bearer ${prefix}…YOUR_FULL_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "auto",
+    "messages": [{"role":"user","content":"Hello!"}]
+  }'`;
+}
+
+async function loadKeys() {
+    const r = await fetch("/api/api-keys");
+    if (!r.ok) return;
+    const j = await r.json();
+    const list = $("#keysList");
+    if (!j.keys.length) {
+        list.innerHTML = `<div class="alert alert-info">${window.t("profile.no_keys")||"No API keys yet."}</div>`;
+        return;
+    }
+    list.innerHTML = j.keys.map(k => `
+        <div class="api-key-card">
+            <div class="info">
+                <div class="name">${escapeHtml(k.name)}</div>
+                <div class="meta"><code data-prefix="${escapeHtml(k.prefix)}">${escapeHtml(k.prefix)}…</code> · ${window.t("profile.created")||"created"} ${new Date(k.created_at*1000).toLocaleDateString()}</div>
+            </div>
+            <div class="key-actions">
+                <button class="btn btn-sm" data-copy-prefix="${escapeHtml(k.prefix)}" title="${window.t("profile.copy_prefix_hint")||"Copy the visible prefix (the full key was shown only once on creation)"}">${window.t("profile.copy_prefix")||"Copy prefix"}</button>
+                <button class="btn btn-sm" data-copy-template="${escapeHtml(k.prefix)}">${window.t("profile.copy_curl")||"Copy curl"}</button>
+                <button class="btn btn-sm btn-danger" data-revoke="${k.id}">${window.t("profile.revoke")||"Revoke"}</button>
+            </div>
+        </div>
+    `).join("");
+    list.querySelectorAll("[data-revoke]").forEach(b => {
+        b.addEventListener("click", async () => {
+            if (!confirm(window.t("profile.revoke_confirm")||"Revoke this key?")) return;
+            const r = await fetch("/api/api-keys/" + b.dataset.revoke, { method: "DELETE" });
+            if (r.ok) loadKeys();
+        });
+    });
+    list.querySelectorAll("[data-copy-template]").forEach(b => {
+        b.addEventListener("click", async () => {
+            const text = buildCurlTemplate(b.dataset.copyTemplate);
+            const ok = await copyToClipboard(text);
+            flashCopyButton(b, ok);
+        });
+    });
+    list.querySelectorAll("[data-copy-prefix]").forEach(b => {
+        b.addEventListener("click", async () => {
+            const ok = await copyToClipboard(b.dataset.copyPrefix);
+            flashCopyButton(b, ok);
+        });
+    });
+}
+
+$("#keyForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const r = await fetch("/api/api-keys", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ name: $("#keyName").value.trim() })
+    });
+    const j = await r.json();
+    if (r.ok) {
+        const fullKey = j.key;
+        const curlReady = `curl ${BASE_URL}/chat/completions \\
+  -H "Authorization: Bearer ${fullKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"auto","messages":[{"role":"user","content":"Hello!"}]}'`;
+        const pythonReady = `from openai import OpenAI
+client = OpenAI(base_url="${BASE_URL}", api_key="${fullKey}")
+print(client.chat.completions.create(model="auto", messages=[{"role":"user","content":"Hello!"}]).choices[0].message.content)`;
+
+        $("#newKeyBox").innerHTML = `
+            <div class="alert alert-ok" style="margin-top: 12px;">
+                ${window.t("profile.key_created")||"Key created — copy it now. You won't see it again."}
+            </div>
+            <div class="new-key-reveal">
+                <label class="reveal-label">${window.t("profile.full_key")||"Your new API key"}</label>
+                <div class="reveal-key-row">
+                    <code id="newKeyValue">${escapeHtml(fullKey)}</code>
+                </div>
+                <div class="reveal-actions">
+                    <button class="btn btn-primary" data-copy-target="newKeyValue">
+                        ${window.t("profile.copy_key_only")||"Copy key only"}
+                    </button>
+                </div>
+            </div>
+            <details class="snippet">
+                <summary>${window.t("profile.snippet_curl_ready")||"Ready-to-paste curl (key embedded)"}</summary>
+                <pre><code id="newKeyCurl">${escapeHtml(curlReady)}</code></pre>
+                <div class="snippet-actions">
+                    <button class="btn btn-sm" data-copy-target="newKeyCurl">${window.t("profile.copy")||"Copy"}</button>
+                </div>
+            </details>
+            <details class="snippet">
+                <summary>${window.t("profile.snippet_python_ready")||"Ready-to-paste Python (key embedded)"}</summary>
+                <pre><code id="newKeyPython">${escapeHtml(pythonReady)}</code></pre>
+                <div class="snippet-actions">
+                    <button class="btn btn-sm" data-copy-target="newKeyPython">${window.t("profile.copy")||"Copy"}</button>
+                </div>
+            </details>`;
+        $("#keyForm").reset();
+        loadKeys();
+    }
+});
+
+// Generic copy handler — works for any element with data-copy-target=ID.
+// Uses the fallback path so it works over plain HTTP on the LAN too.
+document.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-copy-target]");
+    if (!btn) return;
+    e.preventDefault();
+    const el = document.getElementById(btn.dataset.copyTarget);
+    if (!el) return;
+    const ok = await copyToClipboard(el.textContent);
+    flashCopyButton(btn, ok);
+});
+
+$("#logoutBtn").addEventListener("click", async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    location.href = "/login.html";
+});
+
+(async () => { await checkAuth(); renderConnection(); await loadKeys(); })();
+</script>
+</body>
+</html>

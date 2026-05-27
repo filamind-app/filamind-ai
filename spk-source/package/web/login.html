@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Filamind AI · Sign in</title>
+<link rel="stylesheet" href="/auth-common.css">
+</head>
+<body>
+<div class="app-header">
+    <div class="brand">
+        <span class="brand-mark">F</span>
+        <span>Filamind AI</span>
+    </div>
+    <div class="spacer"></div>
+    <button class="lang-pill" id="langBtn">EN</button>
+</div>
+
+<div class="center-shell">
+    <div class="auth-card">
+        <h1 data-i18n="login.title">Welcome back</h1>
+        <p class="sub" data-i18n="login.sub">Sign in to chat with your local AI.</p>
+        <div id="alert"></div>
+        <form id="loginForm">
+            <div class="field">
+                <label data-i18n="login.username">Username</label>
+                <input type="text" id="username" autocomplete="username" required autofocus>
+            </div>
+            <div class="field">
+                <label data-i18n="login.password">Password</label>
+                <input type="password" id="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" data-i18n="login.submit">Sign in</button>
+        </form>
+    </div>
+</div>
+
+<script src="/i18n.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+
+$("#loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const al = $("#alert"); al.innerHTML = "";
+    try {
+        const r = await fetch("/api/auth/login", {
+            method: "POST", headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({
+                username: $("#username").value.trim(),
+                password: $("#password").value
+            })
+        });
+        const j = await r.json();
+        if (!r.ok) {
+            const msg = j.error === "bad_credentials" ? (window.t("login.bad_credentials") || "Invalid username or password.") : (j.msg || j.error);
+            al.innerHTML = `<div class="alert alert-error">${msg}</div>`;
+            return;
+        }
+        location.href = "/index.html";
+    } catch (e) {
+        al.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    }
+});
+</script>
+</body>
+</html>

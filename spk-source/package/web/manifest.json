@@ -1,0 +1,18 @@
+{
+    "name": "Filamind AI",
+    "short_name": "Filamind",
+    "description": "Local LLM chat on your NAS",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#faf9f6",
+    "theme_color": "#c96442",
+    "orientation": "any",
+    "lang": "en",
+    "dir": "auto",
+    "icons": [
+        { "src": "/images/FilamindAI-64.png",  "sizes": "64x64",   "type": "image/png" },
+        { "src": "/images/FilamindAI-128.png", "sizes": "128x128", "type": "image/png" },
+        { "src": "/images/FilamindAI-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" }
+    ]
+}

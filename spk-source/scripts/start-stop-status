@@ -1,0 +1,75 @@
+#!/bin/sh
+# Filamind AI service control — runs the Python control daemon
+# (the daemon supervises llama-server internally)
+
+SYNOPKG_PKGNAME="FilamindAI"
+INSTALL_DIR="/var/packages/${SYNOPKG_PKGNAME}/target"
+NVIDIA_PKG="/var/packages/NVIDIARuntimeLibrary/target"
+
+DAEMON="${INSTALL_DIR}/bin/control_daemon.py"
+LOG_DIR="${INSTALL_DIR}/var"
+PID_FILE="${LOG_DIR}/daemon.pid"
+LOG_FILE="${LOG_DIR}/llama-server.log"
+PYTHON="${PYTHON:-/usr/bin/python3}"
+
+export LD_LIBRARY_PATH="${NVIDIA_PKG}/cuda/lib64:${NVIDIA_PKG}/nvidia/lib:${INSTALL_DIR}/lib:${LD_LIBRARY_PATH}"
+
+start_daemon() {
+    mkdir -p "${LOG_DIR}"
+    if [ ! -x "${PYTHON}" ]; then
+        echo "[$(date)] Python3 not found at ${PYTHON}" >> "${LOG_FILE}"
+        return 1
+    fi
+    if [ ! -f "${DAEMON}" ]; then
+        echo "[$(date)] daemon script missing: ${DAEMON}" >> "${LOG_FILE}"
+        return 1
+    fi
+    nohup "${PYTHON}" "${DAEMON}" >> "${LOG_FILE}" 2>&1 &
+    echo $! > "${PID_FILE}"
+}
+
+stop_daemon() {
+    if [ -f "${PID_FILE}" ]; then
+        kill "$(cat "${PID_FILE}")" 2>/dev/null
+        sleep 1
+        kill -9 "$(cat "${PID_FILE}")" 2>/dev/null
+        rm -f "${PID_FILE}"
+    fi
+    # Belt-and-braces: kill anything we may have started
+    pkill -f "control_daemon.py" 2>/dev/null
+    pkill -f "${INSTALL_DIR}/bin/llama-server" 2>/dev/null
+}
+
+daemon_status() {
+    if [ -f "${PID_FILE}" ] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+case "$1" in
+    start)
+        if daemon_status; then exit 0; fi
+        start_daemon
+        ;;
+    stop)
+        stop_daemon
+        ;;
+    restart)
+        stop_daemon
+        sleep 1
+        start_daemon
+        ;;
+    status)
+        if daemon_status; then exit 0; fi
+        exit 3
+        ;;
+    log)
+        echo "${LOG_FILE}"
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status|log}"
+        exit 1
+        ;;
+esac
+exit 0

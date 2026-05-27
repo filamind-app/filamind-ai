@@ -1,0 +1,92 @@
+# === Build artifacts ===
+*.spk
+spk-source/package.tgz
+spk-source/INFO.bak
+
+# === Large model files (use HuggingFace, not git) ===
+*.gguf
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# === Compiled binaries (rebuild via build_llama_*.sh) ===
+# These are device-specific. Tracked on `device/*` branches only via `git add -f`.
+hello
+hello_gpu
+llama-server-cpu
+llama-server-gpu
+llama-server-*
+spk-source/package/bin/llama-server
+spk-source/package/bin/llama-main
+*.o
+*.a
+*.so
+*.so.*
+*.dll
+*.dylib
+*.exe
+
+# === Build workspaces / extracted toolchains ===
+build/
+build-*/
+toolchain/
+toolchains/
+llama.cpp/
+llama.cpp-*/
+nvidia/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# === Node (for future MCP subprocess servers) ===
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# === IDE / editors ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Logs ===
+*.log
+logs/
+
+# === Local dev / secrets ===
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.crt
+providers.json
+users.db
+agents.db
+saynologyai.conf
+filamindai.conf
+
+# === macOS / Windows cruft ===
+.AppleDouble
+.LSOverride
+Icon
+._*
+$RECYCLE.BIN/
+System\ Volume\ Information/
+
+# === Synology-specific ===
+@eaDir/
+.SynologyWorkingDirectory/

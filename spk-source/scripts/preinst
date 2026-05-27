@@ -1,0 +1,16 @@
+#!/bin/sh
+# Pre-install hook — verify GPU + NVIDIA Runtime Library
+
+# Check NVIDIA driver
+if [ ! -e /dev/nvidia0 ]; then
+    echo "No NVIDIA GPU detected (/dev/nvidia0 missing)" >&2
+    exit 1
+fi
+
+# Check NVIDIARuntimeLibrary
+if [ ! -d "/var/packages/NVIDIARuntimeLibrary/target/cuda/lib64" ]; then
+    echo "NVIDIARuntimeLibrary package not installed or incomplete" >&2
+    exit 1
+fi
+
+exit 0

@@ -1,0 +1,50 @@
+Filamind AI — License Notice
+================================
+
+Copyright (c) 2026 Abdelmonem Awad (eg2@live.com)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this software except in compliance with the License.
+
+Full license text: http://www.apache.org/licenses/LICENSE-2.0
+Project source: https://github.com/filamind-app/filamind-ai
+
+
+WHAT YOU SHOULD KNOW BEFORE INSTALLING
+---------------------------------------
+
+1. PRIVACY
+   Filamind AI runs Large Language Models (LLMs) locally on your Synology NAS.
+   Your prompts and conversations never leave your network unless you
+   explicitly enable a cloud provider (OpenAI, Anthropic, Google) and choose
+   it for a conversation. API keys are stored locally with restrictive
+   filesystem permissions.
+
+2. THIRD-PARTY COMPONENTS
+   This package bundles the llama.cpp inference engine, distributed under the
+   MIT License — https://github.com/ggerganov/llama.cpp.
+   On DVA-series NAS it links against NVIDIA CUDA libraries provided by
+   Synology's separate NVIDIARuntimeLibrary package (declared as a dependency).
+
+3. NO WARRANTY
+   The package is provided "AS IS", without warranty of any kind, express or
+   implied. The author is not liable for any damages, data loss, or system
+   instability resulting from its use.
+
+4. GPU SHARING (DVA 3221 only)
+   The GPU on DVA-series devices is shared with Synology Surveillance Station
+   for camera AI tasks. Running large language models concurrently with active
+   camera recording may cause performance contention.
+
+5. MODEL FILES
+   Model files (.gguf) you place on your NAS are subject to their own licenses
+   (Meta Llama Community License, Mistral License, Apache 2.0, etc.). Please
+   comply with each model's license terms — Filamind AI does not redistribute
+   any model weights.
+
+6. SUPPORT & CONTRIBUTIONS
+   Bug reports and pull requests: https://github.com/filamind-app/filamind-ai/issues
+   Email: eg2@live.com
+
+
+By clicking "I Agree", you accept the Apache 2.0 license and the notices above.

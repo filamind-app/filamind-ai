@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Filamind AI · Setup</title>
+<link rel="stylesheet" href="/auth-common.css">
+</head>
+<body>
+<div class="app-header">
+    <div class="brand">
+        <span class="brand-mark">F</span>
+        <span>Filamind AI</span>
+    </div>
+    <div class="spacer"></div>
+    <button class="lang-pill" id="langBtn">EN</button>
+</div>
+
+<div class="center-shell">
+    <div class="auth-card">
+        <h1 data-i18n="setup.title">Create the first admin account</h1>
+        <p class="sub" data-i18n="setup.sub">This account will own the package configuration. You can add more users later.</p>
+        <div id="alert"></div>
+        <form id="setupForm">
+            <div class="field">
+                <label data-i18n="setup.username">Username</label>
+                <input type="text" id="username" autocomplete="username" required minlength="3" autofocus>
+                <div class="hint" data-i18n="setup.username_hint">At least 3 characters. Lowercase letters &amp; digits recommended.</div>
+            </div>
+            <div class="field">
+                <label data-i18n="setup.display_name">Display name</label>
+                <input type="text" id="display_name" autocomplete="name">
+            </div>
+            <div class="field">
+                <label data-i18n="setup.password">Password</label>
+                <input type="password" id="password" autocomplete="new-password" required minlength="6">
+                <div class="hint" data-i18n="setup.password_hint">At least 6 characters.</div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" data-i18n="setup.submit">Create admin &amp; sign in</button>
+        </form>
+    </div>
+</div>
+
+<script src="/i18n.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+
+$("#setupForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const al = $("#alert"); al.innerHTML = "";
+    try {
+        const r = await fetch("/api/auth/setup", {
+            method: "POST", headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({
+                username: $("#username").value.trim(),
+                display_name: $("#display_name").value.trim(),
+                password: $("#password").value
+            })
+        });
+        const j = await r.json();
+        if (!r.ok) {
+            al.innerHTML = `<div class="alert alert-error">${j.msg || j.error}</div>`;
+            return;
+        }
+        location.href = "/index.html";
+    } catch (e) {
+        al.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    }
+});
+</script>
+</body>
+</html>

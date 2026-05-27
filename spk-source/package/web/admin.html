@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Filamind AI · Admin</title>
+<link rel="stylesheet" href="/auth-common.css">
+</head>
+<body>
+<div class="app-header">
+    <div class="brand">
+        <span class="brand-mark">F</span>
+        <span>Filamind AI</span>
+    </div>
+    <div class="nav">
+        <a href="/index.html" data-i18n="app.chat">Chat</a>
+        <a href="/profile.html" data-i18n="app.profile">Profile</a>
+        <a href="/admin.html" class="active" data-i18n="app.admin">Admin</a>
+    </div>
+    <div class="spacer"></div>
+    <button class="lang-pill" id="langBtn">EN</button>
+    <div class="user-pill"><span class="avatar" id="userAv">U</span><span id="userName">…</span></div>
+    <button class="btn" id="logoutBtn" data-i18n="app.logout">Sign out</button>
+</div>
+
+<div class="page-shell">
+    <h1 data-i18n="admin.title">Admin</h1>
+
+    <div class="card">
+        <h2 data-i18n="admin.users">Users</h2>
+        <table class="users" id="userTable">
+            <thead>
+                <tr>
+                    <th data-i18n="admin.username">Username</th>
+                    <th data-i18n="admin.display_name">Display name</th>
+                    <th data-i18n="admin.role">Role</th>
+                    <th data-i18n="admin.created">Created</th>
+                    <th data-i18n="admin.last_login">Last login</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="userRows"></tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2 data-i18n="admin.add_user">Add user</h2>
+        <div id="addAlert"></div>
+        <form id="addUserForm">
+            <div class="field">
+                <label data-i18n="admin.username">Username</label>
+                <input type="text" id="newUsername" required minlength="3">
+            </div>
+            <div class="field">
+                <label data-i18n="admin.display_name">Display name</label>
+                <input type="text" id="newDisplay">
+            </div>
+            <div class="field">
+                <label data-i18n="admin.password">Password</label>
+                <input type="password" id="newPassword" required minlength="6">
+            </div>
+            <div class="field">
+                <label data-i18n="admin.role">Role</label>
+                <select id="newRole">
+                    <option value="user">user</option>
+                    <option value="admin">admin</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary" data-i18n="admin.create">Create</button>
+        </form>
+    </div>
+</div>
+
+<script src="/i18n.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+let me;
+
+async function checkAuth() {
+    const r = await fetch("/api/auth/status");
+    const j = await r.json();
+    if (!j.authenticated) { location.href = "/login.html"; return; }
+    if (j.user.role !== "admin") { location.href = "/index.html"; return; }
+    me = j.user;
+    $("#userName").textContent = me.display_name;
+    $("#userAv").textContent = (me.display_name || me.username)[0].toUpperCase();
+}
+
+function fmtDate(ts) {
+    if (!ts) return window.t("admin.never") || "Never";
+    return new Date(ts * 1000).toLocaleString();
+}
+
+async function loadUsers() {
+    const r = await fetch("/api/users");
+    if (!r.ok) return;
+    const j = await r.json();
+    const tbody = $("#userRows");
+    tbody.innerHTML = j.users.map(u => `
+        <tr>
+            <td>${u.username}</td>
+            <td>${u.display_name || ""}</td>
+            <td><span class="badge badge-${u.role}">${u.role}</span></td>
+            <td>${fmtDate(u.created_at)}</td>
+            <td>${fmtDate(u.last_login)}</td>
+            <td>${u.id !== me.id ? `<button class="btn btn-danger" data-delete="${u.id}" data-name="${u.username}">${window.t("admin.delete")||"Delete"}</button>` : ""}</td>
+        </tr>
+    `).join("");
+    tbody.querySelectorAll("[data-delete]").forEach(b => {
+        b.addEventListener("click", () => deleteUser(b.dataset.delete, b.dataset.name));
+    });
+}
+
+async function deleteUser(id, name) {
+    const tpl = window.t("admin.confirm_delete") || "Delete user {username}?";
+    if (!confirm(tpl.replace("{username}", name))) return;
+    const r = await fetch("/api/users/" + id, { method: "DELETE" });
+    if (r.ok) loadUsers();
+}
+
+$("#addUserForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const al = $("#addAlert"); al.innerHTML = "";
+    const r = await fetch("/api/users", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+            username: $("#newUsername").value.trim(),
+            password: $("#newPassword").value,
+            display_name: $("#newDisplay").value.trim(),
+            role: $("#newRole").value
+        })
+    });
+    const j = await r.json();
+    if (!r.ok) {
+        al.innerHTML = `<div class="alert alert-error">${j.error || "error"}</div>`;
+        return;
+    }
+    al.innerHTML = `<div class="alert alert-ok">Created.</div>`;
+    $("#addUserForm").reset();
+    loadUsers();
+});
+
+$("#logoutBtn").addEventListener("click", async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    location.href = "/login.html";
+});
+
+(async () => {
+    await checkAuth();
+    await loadUsers();
+})();
+</script>
+</body>
+</html>

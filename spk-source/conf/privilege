@@ -1,0 +1,10 @@
+{
+    "defaults": {
+        "run-as": "package"
+    },
+    "username": "filamindai",
+    "groupname": "filamindai",
+    "join-groups": [
+        "video"
+    ]
+}

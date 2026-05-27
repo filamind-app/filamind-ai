@@ -1,0 +1,31 @@
+[
+    {
+        "step_title": "Initial setup",
+        "items": [
+            {
+                "type": "textfield",
+                "desc": "HTTP port for the chat service.",
+                "subitems": [
+                    {
+                        "key": "wizard_port",
+                        "desc": "Port",
+                        "defaultValue": "8181",
+                        "validator": { "allowBlank": false, "regex": { "expr": "/^[0-9]+$/", "errorText": "Must be a number" } }
+                    }
+                ]
+            },
+            {
+                "type": "textfield",
+                "desc": "Optional: path to a specific .gguf model file. Leave empty to auto-discover from /volume1/FilamindAI/models/ (or /volume1/SaynologyAI/models/ for legacy installs), /volume1/AI/models/, and the package's models/ folder.",
+                "subitems": [
+                    {
+                        "key": "wizard_model_path",
+                        "desc": "Model path",
+                        "defaultValue": "",
+                        "validator": { "allowBlank": true }
+                    }
+                ]
+            }
+        ]
+    }
+]
