@@ -4,7 +4,7 @@
 # hard-code them in this file (it is in a public-ish git repo).
 #
 # Usage:
-#   export NAS_HOST=eg2@192.168.0.253
+#   export NAS_HOST=user@nas.local      # or user@192.168.x.y
 #   export NAS_PORT=2222
 #   export NAS_PASS='your-password'        # OR set up SSH key auth and unset NAS_PASS
 #   bash copy_nas_libs.sh
