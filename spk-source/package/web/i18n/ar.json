@@ -105,7 +105,22 @@
         "feat_observability": "سجل تدقيق لكل استدعاء لرؤية الأدوات التي استدعاها الوكيل والقيم المُمرَّرة.",
         "spec_link": "المواصفات: <a href=\"https://modelcontextprotocol.io\" target=\"_blank\" rel=\"noopener\">modelcontextprotocol.io</a>",
         "registered_servers": "خوادم MCP المسجّلة",
-        "no_servers_yet": "لا توجد خوادم MCP مسجّلة بعد."
+        "no_servers_yet": "لا توجد خوادم MCP مسجّلة بعد.",
+        "loading": "جارٍ التحميل…",
+        "unavailable": "محرّك MCP غير متاح في هذا التثبيت.",
+        "tools": "أداة",
+        "show_tools": "قائمة الأدوات",
+        "test_tool": "اختبار استدعاء أداة",
+        "run": "تشغيل",
+        "audit_log": "سجل التدقيق (آخر 100 استدعاء — للمسؤول فقط)",
+        "audit_loading": "جارٍ التحميل…",
+        "audit_admin_only": "للمسؤول فقط.",
+        "audit_empty": "لا توجد استدعاءات بعد.",
+        "audit_time": "الوقت",
+        "audit_tool": "الأداة",
+        "audit_dur": "ms",
+        "audit_result": "النتيجة",
+        "next_title": "قريباً في v1.3.1"
     },
     "about": {
         "tab": "حول التطبيق",

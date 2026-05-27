@@ -44,10 +44,31 @@ CONFIG_FILE  = ETC_DIR + "/filamindai.conf"
 LEGACY_CONFIG_FILE = "/var/packages/SaynologyAI/etc/saynologyai.conf"  # back-compat read on first run
 SECRET_FILE  = ETC_DIR + "/secret.key"
 DB_FILE      = ETC_DIR + "/users.db"
+MCP_DB_FILE  = ETC_DIR + "/mcp.db"
 WEB_DIR      = INSTALL_DIR + "/web"
 LLAMA_BIN    = INSTALL_DIR + "/bin/llama-server"
 LOG_FILE     = INSTALL_DIR + "/var/llama-server.log"
 INTERNAL_PORT = 8180
+
+# MCP runtime — loaded lazily so the daemon still starts if the module is missing.
+_MCP_REGISTRY = None
+def _get_mcp_registry():
+    """Lazy-init the MCP registry. Returns None on import error (tools then unavailable)."""
+    global _MCP_REGISTRY
+    if _MCP_REGISTRY is not None:
+        return _MCP_REGISTRY
+    try:
+        import sys as _sys
+        _sys.path.insert(0, INSTALL_DIR + "/bin")
+        from mcp_runtime import MCPRegistry          # noqa: WPS433 — runtime import is intentional
+        from mcp_servers import register_builtin_servers
+        os.makedirs(ETC_DIR, exist_ok=True)
+        _MCP_REGISTRY = MCPRegistry(MCP_DB_FILE)
+        register_builtin_servers(_MCP_REGISTRY)
+        return _MCP_REGISTRY
+    except Exception as _e:  # noqa: BLE001
+        sys.stderr.write(f"[mcp] runtime unavailable: {_e}\n")
+        return None
 
 DEFAULT_CFG = {
     "MODEL_PATH":    "",
@@ -839,7 +860,7 @@ def _sanitize_v1_body(raw: bytes) -> bytes:
     return json.dumps(out, ensure_ascii=False).encode("utf-8")
 
 
-DAEMON_VERSION = "1.2.6"
+DAEMON_VERSION = "1.3.0"
 REPO_OWNER     = "filamind-app"
 REPO_NAME      = "filamind-ai"
 REPO_URL       = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
@@ -1697,6 +1718,28 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_text(200, md, "text/markdown; charset=utf-8")
         if path == "/api/check-update":
             return self._send_json(200, _check_for_update())
+        # ─── MCP read endpoints ──────────────────────────────────────────
+        if path == "/api/mcp/servers":
+            u = self._require_user()
+            if not u: return
+            r = _get_mcp_registry()
+            if r is None:
+                return self._send_json(503, {"error": "mcp_unavailable", "servers": []})
+            return self._send_json(200, {"servers": r.servers()})
+        if path == "/api/mcp/tools":
+            u = self._require_user()
+            if not u: return
+            r = _get_mcp_registry()
+            if r is None:
+                return self._send_json(503, {"error": "mcp_unavailable", "tools": []})
+            return self._send_json(200, {"tools": r.list_tools()})
+        if path == "/api/mcp/audit":
+            u = self._require_user("admin")
+            if not u: return
+            r = _get_mcp_registry()
+            if r is None:
+                return self._send_json(503, {"error": "mcp_unavailable", "entries": []})
+            return self._send_json(200, {"entries": r.recent_audit(limit=100)})
         if path == "/api/diagnose":
             u = self._require_user("admin")
             if not u: return
@@ -1862,6 +1905,42 @@ class Handler(BaseHTTPRequestHandler):
             if not self._require_user("admin"): return
             STATE["request_restart"] = True
             return self._send_json(200, {"ok": True})
+
+        # ─── MCP write/call endpoints ────────────────────────────────────
+        # Toggle a server: POST /api/mcp/servers/<name>/toggle  body {"enabled": true|false}
+        if path.startswith("/api/mcp/servers/") and path.endswith("/toggle"):
+            u = self._require_user("admin")
+            if not u: return
+            name = path[len("/api/mcp/servers/"):-len("/toggle")]
+            r = _get_mcp_registry()
+            if r is None:
+                return self._send_json(503, {"error": "mcp_unavailable"})
+            data = self._read_body() or {}
+            try:
+                r.set_enabled(name, bool(data.get("enabled", True)))
+                return self._send_json(200, {"ok": True, "name": name, "enabled": bool(data.get("enabled", True))})
+            except Exception as e:
+                return self._send_json(400, {"error": str(e)[:200]})
+
+        # Call a tool: POST /api/mcp/call  body {"tool": "...", "args": {...}}
+        if path == "/api/mcp/call":
+            user = self._require_user()
+            if not user: return
+            r = _get_mcp_registry()
+            if r is None:
+                return self._send_json(503, {"error": "mcp_unavailable"})
+            data = self._read_body() or {}
+            tool_name = (data.get("tool") or "").strip()
+            args      = data.get("args") or {}
+            if not tool_name:
+                return self._send_json(400, {"error": "tool name required"})
+            try:
+                out = r.call(tool_name, args, user_id=user["id"])
+                status = 200 if out.get("ok") else 400
+                return self._send_json(status, out)
+            except Exception as e:
+                # rate-limit / hop-limit / tool-not-found → 400 with message
+                return self._send_json(400, {"ok": False, "error": str(e)[:200], "type": type(e).__name__})
         if path == "/api/select-model":
             if not self._require_user("admin"): return
             if not _csrf_ok(self): return self._send_json(403, {"error": "csrf_blocked"})

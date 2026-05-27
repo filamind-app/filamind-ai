@@ -17,6 +17,56 @@ Following [Keep a Changelog](https://keepachangelog.com/) — تصنيفات: **
 
 ---
 
+## [1.3.0] — 2026-05-27
+
+**MCP — Model Context Protocol runtime + 8 Tier-A tool servers** · أول إصدار يمنح المساعد القدرة على استدعاء أدوات حقيقية أثناء المحادثة.
+
+### Added — MCP Runtime
+- **`package/bin/mcp_runtime.py`** (~300 lines) — in-process MCP-style tool registry with:
+  - `ToolServer` base class + `Tool` descriptor (name, JSON-schema parameters, handler, `sensitive` flag for audit-log redaction).
+  - **Format adapters**: `tool.as_openai()` / `tool.as_anthropic()` (input_schema) / `tool.as_gemini()` (function_declarations). One source of truth, three cloud-provider wire formats.
+  - **`registry.call(tool, args, user_id, agent_id, hop)`** — dispatches, audit-logs, and enforces:
+    - **Rate limit**: 60 calls/hour/user (configurable, sliding window).
+    - **Hop limit**: 8 tool-call hops per chat turn (prevents runaway loops).
+  - **SQLite audit log** at `/var/packages/FilamindAI/etc/mcp.db` with `mcp_audit` (id, ts, user_id, agent_id, tool, server, args_json, result_size, duration_ms, ok, error) and `mcp_servers` (name, enabled, config_json) tables. Indexed on `ts DESC` and `(user_id, ts DESC)` for fast UI queries.
+  - **Sensitive-args redaction** — tools marked `sensitive=True` (e.g. `shell.run`) get `<redacted>` in the audit log instead of the raw arguments.
+
+### Added — 8 built-in Tool servers (Tier A)
+- **`calculator.eval`** — safe arithmetic via AST whitelist. Allows `+ - * / // % **`, `abs/round/min/max/sum/len/pow/int/float`, and constants `pi`, `e`. Blocks `import`, attribute access, lambdas, and unknown names.
+- **`datetime.now` / `.parse` / `.offset`** — current time (UTC + local + epoch + weekday), parse 7+ common formats, add/subtract seconds.
+- **`memory.set` / `.get` / `.list` / `.delete`** — persistent KV store in SQLite, 128-char key cap, 4 KB value cap.
+- **`nas_info.snapshot`** — CPU count + load averages, total/available memory, disk usage per `/volume*`, GPU presence (`/dev/nvidia*`), uptime, hostname.
+- **`filesystem.read_file` / `.list_dir`** — UTF-8 file read + directory listing under admin-defined `allow_roots` (defaults: `/volume1/FilamindAI/shared`, `/volume1/AI/shared`). 256 KB read cap. Path-traversal blocked via `realpath` + `commonpath` check.
+- **`fetch.get`** — HTTPS GET against `allow_hosts` (defaults: github.com, huggingface.co, wikipedia.org, duckduckgo.com). 200 KB body cap, 10s timeout. Resolves DNS and refuses any private/RFC1918 IP (defeats DNS rebinding).
+- **`shell.run`** — execute a command **only if** its exact string is in the admin's `allow_commands` list. Default list is empty → disabled until opted in. Suggests safe defaults: `uptime`, `df -h`, `free -h`, `uname -a`, `date`, `hostname`. Marked `sensitive` so args don't appear in the audit log.
+- **`sqlite.query`** — read-only SELECT against SQLite files under allow-listed roots. Returns max 200 rows. Refuses anything that doesn't start with `SELECT` (case-insensitive).
+
+### Added — Daemon endpoints
+- **`GET /api/mcp/servers`** — list registered servers + their tools + enabled state.
+- **`GET /api/mcp/tools`** — flat list of all enabled tools (used by future cloud-provider tool-injection).
+- **`GET /api/mcp/audit`** (admin) — last 100 audit log entries.
+- **`POST /api/mcp/servers/<name>/toggle`** (admin) — `{"enabled": true|false}` enable / disable.
+- **`POST /api/mcp/call`** — execute a tool. Body: `{"tool": "calculator.eval", "args": {"expression": "2+2"}}`. Returns `{ok, result, server, duration_ms}` or `{ok:false, error, type}` on tool-not-found / rate-limit / hop-limit.
+
+### Added — UI (Settings → MCP)
+- Replaces the v1.2.0 "Coming in v1.3" placeholder with a real management surface:
+  - **Server list** with per-server enable/disable toggle, tool count, expandable tool descriptions.
+  - **Tool tester** — dropdown of all enabled tools + JSON arg input + Run button + result viewer.
+  - **Audit log viewer** (admin only) — last 100 calls in a sortable table: timestamp, tool, duration, success/error.
+  - Roadmap card listing Tier-B cloud integrations (Brave/Tavily search, GitHub, Home Assistant, Synology APIs) shipping in v1.3.1.
+- 18 new i18n keys under `mcp.*` in both `en.json` and `ar.json` (natural Arabic phrasing — "قائمة الأدوات" / "سجل التدقيق").
+
+### Not yet wired (will follow in v1.3.0.x patches)
+- **Tool-call loop in `_chat_router`** — endpoint-level tool injection per provider + auto-execution of returned `tool_calls` + multi-hop continuation. The runtime supports it; the chat router hasn't been touched yet.
+- **Per-agent allow-lists** — agents table will get a `tools` JSON column; admin UI will pick which tools each agent can call.
+- **Tier C subprocess servers** (puppeteer, real git, pdf) — needs Node.js bundled with the SPK; deferred to v1.4.
+
+### Build / install
+- New files inside the SPK: `package/bin/mcp_runtime.py`, `package/bin/mcp_servers.py`. The daemon adds them to `sys.path` at boot and lazy-imports, so a missing/broken MCP module degrades gracefully (the daemon still serves chat).
+- `mcp.db` created on first boot under `etc/`. No migration needed for existing installs.
+
+---
+
 ## [1.2.6] — 2026-05-27
 
 إصلاح فشل التثبيت على الأجهزة بدون GPU · Fix install failure on GPU-less devices.
