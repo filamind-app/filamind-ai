@@ -20,7 +20,7 @@ jobs:
     name: gitleaks (secret scan)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
@@ -36,7 +36,7 @@ jobs:
       matrix:
         language: [python, javascript]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
@@ -50,7 +50,7 @@ jobs:
     name: Syntax sanity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: JSON validity (i18n + manifest + ui/config)
         run: |
           for f in $(git ls-files '*.json' 'spk-source/package/ui/config'); do
@@ -78,7 +78,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run build_spk.sh (without llama-server binary — main branch only)
         run: |
           # main lacks the device-specific binary; the build script tolerates this
