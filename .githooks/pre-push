@@ -1,0 +1,39 @@
+#!/bin/bash
+# Local pre-push protection for filamind-ai
+# Blocks force-push and deletion on protected branches.
+# Bypass for emergencies (secret scrubbing etc.): FORCE_PUSH_ALLOW=1 git push --force ...
+
+PROTECTED='^refs/heads/(main|device/.*)$'
+zero='0000000000000000000000000000000000000000'
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    if [[ "$remote_ref" =~ $PROTECTED ]]; then
+        # Deletion attempt
+        if [ "$local_sha" = "$zero" ]; then
+            echo ""
+            echo "🛑 BLOCKED: pre-push refuses to DELETE protected branch '$remote_ref'"
+            [ "$FORCE_PUSH_ALLOW" = "1" ] || exit 1
+            echo "   (FORCE_PUSH_ALLOW=1 — allowing)"
+            continue
+        fi
+
+        # Force-push detection: existing remote not reachable from local tip = non-fast-forward
+        if [ "$remote_sha" != "$zero" ]; then
+            if ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+                echo ""
+                echo "🛑 BLOCKED: pre-push refuses NON-FAST-FORWARD update to '$remote_ref'"
+                echo "   local:  $local_sha"
+                echo "   remote: $remote_sha"
+                echo ""
+                echo "   This usually means you are about to rewrite history. If you are"
+                echo "   intentionally scrubbing a leaked secret or doing an authorized"
+                echo "   history rewrite, bypass with:"
+                echo "       FORCE_PUSH_ALLOW=1 git push --force ..."
+                [ "$FORCE_PUSH_ALLOW" = "1" ] || exit 1
+                echo "   (FORCE_PUSH_ALLOW=1 — allowing)"
+            fi
+        fi
+    fi
+done
+
+exit 0
