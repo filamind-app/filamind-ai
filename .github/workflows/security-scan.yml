@@ -89,7 +89,7 @@ jobs:
           # Patch the build script for the CI runner's paths.
           sed -i "s|/mnt/c/Users/Eg2/Desktop/saynolgy|$PWD|g" build_spk.sh
           bash build_spk.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: spk-debug-build
           path: Filamind.spk
