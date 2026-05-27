@@ -17,6 +17,23 @@ Following [Keep a Changelog](https://keepachangelog.com/) — تصنيفات: **
 
 ---
 
+## [1.2.6] — 2026-05-27
+
+إصلاح فشل التثبيت على الأجهزة بدون GPU · Fix install failure on GPU-less devices.
+
+### Fixed
+- **DS1821+ (and any non-DVA Synology) install failed at `preinst`** with `No NVIDIA GPU detected (/dev/nvidia0 missing) — End preinst ret=[1]`. The pre-install hook unconditionally required an NVIDIA GPU + the NVIDIARuntimeLibrary package, which is correct for the DVA-3221 build but completely wrong for the CPU-only DS1821+ build. Root cause: a single `scripts/preinst` was shipped on both device branches without specialization.
+- **`preinst` is now capability-aware** — reads the `model="…"` field from the staging INFO file and:
+  - `synology_denverton_dva3221` → still requires NVIDIA + the runtime library (with a friendlier error pointing users to the CPU build link if no GPU).
+  - any other model (incl. `synology_v1000_1821+`) → CPU-only path, only checks that `python3` is present.
+- Error messages on the GPU path now tell users explicitly which SPK to download if they're on the wrong device.
+
+### Notes
+- The fix is identical across `main`, `device/dva3221`, and `device/ds1821-plus` — a single smart preinst replaces what would otherwise need per-branch divergence.
+- Diagnostic that found the root cause: `sudo tail /var/log/synopkg.log` on the failing NAS showed `Begin preinst` immediately followed by `End preinst ret=[1]`, with `No NVIDIA GPU detected` in `/var/log/messages`.
+
+---
+
 ## [1.2.5] — 2026-05-27
 
 بنية الإصدارات + DSM Package Source + صفحة "حول التطبيق" داخل الـ UI · Release infrastructure + DSM Package Source + in-app About tab.

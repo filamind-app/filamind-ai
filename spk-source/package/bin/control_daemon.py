@@ -839,7 +839,7 @@ def _sanitize_v1_body(raw: bytes) -> bytes:
     return json.dumps(out, ensure_ascii=False).encode("utf-8")
 
 
-DAEMON_VERSION = "1.2.5"
+DAEMON_VERSION = "1.2.6"
 REPO_OWNER     = "filamind-app"
 REPO_NAME      = "filamind-ai"
 REPO_URL       = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
