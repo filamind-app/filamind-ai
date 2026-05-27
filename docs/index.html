@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Filamind AI — Package Source for Synology DSM</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    max-width: 760px; margin: 0 auto; padding: 40px 24px;
+    line-height: 1.6; color: #1a1814; background: #faf9f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #ece9e0; background: #1f1e1c; }
+    code { background: #2a2926; }
+    .card { background: #28272540; border-color: #36332c; }
+  }
+  h1 { margin: 0 0 6px; font-size: 28px; }
+  h2 { margin: 28px 0 8px; font-size: 19px; }
+  .lede { color: #5d564b; margin: 0 0 24px; font-size: 17px; }
+  .card {
+    background: #fff; border: 1px solid #e6e1d3; border-radius: 12px;
+    padding: 20px 24px; margin: 16px 0;
+  }
+  code, pre { font-family: "SF Mono", Menlo, monospace; font-size: 13px; }
+  code { background: #f5f3ec; padding: 1px 6px; border-radius: 4px; }
+  pre {
+    background: #1f1e1c; color: #ece9e0; padding: 12px 14px;
+    border-radius: 8px; overflow-x: auto; font-size: 12px;
+  }
+  a { color: #c96442; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ol li, ul li { margin: 4px 0; }
+  .pill {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 500;
+    background: #faeae2; color: #c96442;
+  }
+  hr { border: 0; border-top: 1px solid #e6e1d3; margin: 32px 0; }
+  footer { color: #8a8478; font-size: 13px; margin-top: 32px; }
+</style>
+</head>
+<body>
+
+<h1>Filamind AI <span class="pill">Synology Package Source</span></h1>
+<p class="lede">Private, local AI chat for Synology NAS. This page <em>is</em> a third-party DSM Package Source — point Package Center at it for one-click updates.</p>
+
+<div class="card">
+  <h2>🚀 One-click updates via DSM Package Center</h2>
+  <ol>
+    <li>Open <b>DSM → Package Center → Settings → Package Sources → Add</b></li>
+    <li>Name: <code>Filamind AI</code></li>
+    <li>Location: <code>https://filamind-app.github.io/filamind-ai/</code></li>
+    <li>Click <b>OK</b>. DSM verifies the source.</li>
+    <li>Switch to the <b>Community</b> tab — Filamind AI appears with the current version and an Install button.</li>
+  </ol>
+  <p>After every release on GitHub, DSM detects the new version and offers an <b>Update</b> button.</p>
+</div>
+
+<h2>📥 Manual install (alternative)</h2>
+<p>Pick the SPK matching your device from the <a href="https://github.com/filamind-app/filamind-ai/releases">Releases page</a> and install via <b>Package Center → Manual Install</b>.</p>
+
+<h2>🖥️ Supported devices</h2>
+<ul>
+  <li><b>DVA 3221</b> (NVIDIA GTX 1650 4GB, CUDA 10.1) — GPU-accelerated llama.cpp b1620, supports Llama 2 / Mistral v0.2 / Phi-2 / CodeLlama / AceGPT (Arabic)</li>
+  <li><b>DS1821+</b> (AMD Ryzen V1500B, AVX2 CPU) — Latest llama.cpp, supports Llama 3.x / Qwen 2.5 / Gemma 2/3 / Phi-3/4 / Aya Expanse / Mixtral / 70B-class models</li>
+</ul>
+
+<h2>📄 Package metadata (machine-readable)</h2>
+<p>DSM fetches this URL when checking for updates: <a href="packages.json"><code>packages.json</code></a></p>
+
+<hr>
+
+<h2>🔗 Links</h2>
+<ul>
+  <li><a href="https://github.com/filamind-app/filamind-ai">Source code on GitHub</a></li>
+  <li><a href="https://github.com/filamind-app/filamind-ai/releases">All releases</a></li>
+  <li><a href="https://github.com/filamind-app/filamind-ai/blob/main/CHANGELOG.md">Full changelog</a></li>
+  <li><a href="https://github.com/filamind-app/filamind-ai/issues">Report an issue</a></li>
+  <li><a href="https://github.com/filamind-app/filamind-ai/discussions">Discussions</a></li>
+</ul>
+
+<footer>
+  Apache License 2.0 · Maintained by <a href="mailto:eg2@live.com">Abdelmonem Awad</a><br>
+  Built with llama.cpp (MIT). NVIDIA CUDA runtime supplied by Synology's NVIDIARuntimeLibrary package on DVA-series NAS.
+</footer>
+
+</body>
+</html>

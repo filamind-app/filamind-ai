@@ -819,6 +819,7 @@ html[dir="rtl"] .user-menu-dropdown { right: auto; left: 0; }
             <button class="tab" data-tab="modes">Agents</button>
             <button class="tab" data-tab="connection">Connection</button>
             <button class="tab" data-tab="mcp">MCP</button>
+            <button class="tab" data-tab="about" data-i18n="about.tab">About</button>
         </div>
 
         <div class="tab-content active" data-tab-content="general">
@@ -1088,22 +1089,80 @@ html[dir="rtl"] .user-menu-dropdown { right: auto; left: 0; }
         <div class="tab-content" data-tab-content="mcp">
             <div class="field">
                 <label data-i18n="mcp.title">Model Context Protocol (MCP)</label>
-                <div class="hint" data-i18n="mcp.intro">MCP is an open standard for connecting AI assistants to tools, file systems, databases, and external APIs in a uniform way. Agents that support MCP can read NAS files, query databases, search the web, run scripts, and call any service that exposes an MCP server.</div>
+                <div class="hint" data-i18n="mcp.intro">Tool servers that the assistant can call mid-conversation: filesystem (allow-listed), HTTP fetch, calculator, time, memory, NAS info, SQLite, shell (opt-in). Each call is audit-logged.</div>
             </div>
-            <div class="card" style="border-style: dashed; background: var(--bg-elev);">
-                <h2 data-i18n="mcp.coming_title">🔌 Coming in v1.3</h2>
-                <div class="hint" style="margin-bottom: 10px;" data-i18n="mcp.coming_intro">MCP integration is planned for the next release. When shipped, you'll be able to:</div>
-                <ul style="font-size: 14px; line-height: 1.7; color: var(--text-dim); padding-left: 22px;">
-                    <li data-i18n="mcp.feat_servers">Register MCP servers by URL or local command (stdio).</li>
-                    <li data-i18n="mcp.feat_tools">Pick per-agent which tools (resources, prompts, functions) the model can call.</li>
-                    <li data-i18n="mcp.feat_filesystem">Bundled servers: NAS filesystem (allow-listed paths), HTTP fetch (allow-listed hosts), calculator, current time, simple web search.</li>
-                    <li data-i18n="mcp.feat_observability">Per-call audit log so you can see which tools the agent invoked and with what arguments.</li>
-                </ul>
-                <div class="hint" style="margin-top: 10px;" data-i18n="mcp.spec_link">Spec: <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">modelcontextprotocol.io</a></div>
-            </div>
+
             <div class="field">
-                <label data-i18n="mcp.registered_servers">Registered MCP servers</label>
-                <div id="mcpServersList"><div class="hint" data-i18n="mcp.no_servers_yet">No MCP servers registered yet.</div></div>
+                <label data-i18n="mcp.registered_servers">Registered servers</label>
+                <div id="mcpServersList">
+                    <div class="hint" data-i18n="mcp.loading">Loading…</div>
+                </div>
+            </div>
+
+            <div class="field">
+                <label data-i18n="mcp.test_tool">Test a tool call</label>
+                <div class="card" style="background:var(--bg-elev); padding:14px 16px;">
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+                        <select id="mcpToolSelect" class="ct-select" style="flex:1; min-width:220px;"></select>
+                        <button class="btn btn-primary" id="btnMcpCall" data-i18n="mcp.run">Run</button>
+                    </div>
+                    <textarea id="mcpToolArgs" placeholder='{"expression": "2 + 3 * 4"}' style="width:100%; min-height:80px; font-family:monospace; font-size:12px; padding:8px;"></textarea>
+                    <div id="mcpToolResult" style="margin-top:8px;"></div>
+                </div>
+            </div>
+
+            <div class="field">
+                <label data-i18n="mcp.audit_log">Audit log (last 100 calls — admin only)</label>
+                <div id="mcpAuditCard" class="card" style="background:var(--bg-card); padding:0; max-height:340px; overflow-y:auto; font-size:12px;">
+                    <div style="padding:14px;" class="hint" data-i18n="mcp.audit_loading">Loading…</div>
+                </div>
+            </div>
+
+            <div class="card" style="background:var(--bg-elev); margin-top:14px; font-size:13px;">
+                <h2 style="margin:0 0 6px; font-size:14px;" data-i18n="mcp.next_title">Coming in v1.3.1</h2>
+                <div class="hint">Tier B cloud integrations: web search (Brave/Tavily), GitHub, Home Assistant, Synology FileStation, Surveillance Station — they need per-user API keys you'll paste under Settings → Providers.</div>
+                <div class="hint" style="margin-top: 6px;" data-i18n="mcp.spec_link">Spec: <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">modelcontextprotocol.io</a></div>
+            </div>
+        </div>
+
+        <div class="tab-content" data-tab-content="about">
+            <div class="field">
+                <label data-i18n="about.installed_version">Installed version</label>
+                <div id="aboutVersionCard" class="card" style="background:var(--bg-elev); padding:14px 16px; margin-top:6px;">
+                    <div class="hint" data-i18n="about.loading">Loading…</div>
+                </div>
+            </div>
+
+            <div class="field">
+                <label data-i18n="about.update_check">Updates</label>
+                <div id="aboutUpdateCard" class="card" style="background:var(--bg-elev); padding:14px 16px; margin-top:6px;">
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <button class="btn btn-primary" id="btnCheckUpdate" data-i18n="about.check_now">Check for updates</button>
+                        <a id="aboutReleasesLink" class="btn" href="https://github.com/filamind-app/filamind-ai/releases" target="_blank" rel="noopener" data-i18n="about.all_releases">All releases on GitHub</a>
+                    </div>
+                    <div id="aboutUpdateResult" style="margin-top:12px;"></div>
+                    <div class="hint" style="margin-top:10px;" data-i18n="about.dsm_hint">For one-click updates from DSM Package Center, add the Filamind AI source URL under Package Center → Settings → Package Sources → Add → <code>https://filamind-app.github.io/filamind-ai/</code></div>
+                </div>
+            </div>
+
+            <div class="field">
+                <label data-i18n="about.changelog">Release history</label>
+                <div id="aboutChangelogCard" class="card" style="background:var(--bg-card); padding:14px 16px; margin-top:6px; max-height:520px; overflow-y:auto;">
+                    <div class="hint" data-i18n="about.loading">Loading…</div>
+                </div>
+            </div>
+
+            <div class="field">
+                <label data-i18n="about.links">Useful links</label>
+                <div class="card" style="background:var(--bg-elev); padding:14px 16px; margin-top:6px;">
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <a class="btn" href="https://github.com/filamind-app/filamind-ai" target="_blank" rel="noopener" data-i18n="about.source_code">📦 Source code</a>
+                        <a class="btn" href="https://github.com/filamind-app/filamind-ai/issues" target="_blank" rel="noopener" data-i18n="about.report_issue">🐛 Report an issue</a>
+                        <a class="btn" href="https://github.com/filamind-app/filamind-ai/blob/main/CHANGELOG.md" target="_blank" rel="noopener" data-i18n="about.full_changelog">📜 Full changelog</a>
+                        <a class="btn" href="https://github.com/filamind-app/filamind-ai/discussions" target="_blank" rel="noopener" data-i18n="about.discussions">💬 Discussions</a>
+                        <a class="btn" href="mailto:eg2@live.com" data-i18n="about.contact_maintainer">✉ Email maintainer</a>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -2434,9 +2493,226 @@ function openSettings() {
     $("#cfgUseStream").checked = !!s.useStream;
     renderAgentsTab();
     loadModelList();
+    renderAboutTab();
+    renderMcpTab();
     els.settingsModal.classList.add("open");
 }
 function closeSettings() { els.settingsModal.classList.remove("open"); }
+
+// ─── About tab ────────────────────────────────────────────────────────────
+async function renderAboutTab() {
+    const versionCard   = document.getElementById("aboutVersionCard");
+    const changelogCard = document.getElementById("aboutChangelogCard");
+    const t = (k, fb) => (window.tStr && window.tStr(k)) || fb;
+
+    try {
+        const r = await fetch("/api/version");
+        const v = await r.json();
+        const rows = [
+            [t("about.row_version", "Version"),        `<b>${escapeHtml(v.package_version || v.daemon_version)}</b>`],
+            [t("about.row_displayname", "Display name"), escapeHtml(v.displayname || "")],
+            [t("about.row_engine", "Inference engine"), escapeHtml(v.engine || "")],
+            [t("about.row_model", "Device target"),    escapeHtml(v.model || "")],
+            [t("about.row_arch", "Architecture"),      escapeHtml(v.arch || "")],
+            [t("about.row_dsm", "DSM version"),        escapeHtml(v.dsm_version || "—")],
+            [t("about.row_build", "Built"),            escapeHtml(v.build_date || "—")],
+            [t("about.row_sha", "Git revision"),       v.git_sha ? `<a href="${escapeHtml(v.repo_url)}/commit/${escapeHtml(v.git_sha)}" target="_blank" rel="noopener"><code>${escapeHtml(v.git_sha)}</code></a> (${escapeHtml(v.git_branch || "main")})` : "—"],
+            [t("about.row_maintainer", "Maintainer"),  escapeHtml(v.maintainer || "")],
+        ];
+        versionCard.innerHTML = `<table style="border-collapse:collapse; width:100%; font-size:13px;">${
+            rows.map(([k, val]) => `<tr><td style="padding:4px 8px; color:var(--text-dim); width:140px; vertical-align:top;">${escapeHtml(k)}</td><td style="padding:4px 8px;">${val}</td></tr>`).join("")
+        }</table>`;
+    } catch (e) {
+        versionCard.innerHTML = `<div class="alert alert-error">${escapeHtml(String(e))}</div>`;
+    }
+
+    try {
+        const r = await fetch("/api/changelog");
+        const md = await r.text();
+        // Use the existing markdown renderer if available; fall back to <pre>.
+        if (typeof renderMarkdown === "function") {
+            changelogCard.innerHTML = renderMarkdown(md);
+        } else {
+            changelogCard.innerHTML = `<pre style="white-space:pre-wrap; margin:0; font-size:12px;">${escapeHtml(md)}</pre>`;
+        }
+    } catch (e) {
+        changelogCard.innerHTML = `<div class="alert alert-error">${escapeHtml(String(e))}</div>`;
+    }
+}
+
+async function checkForUpdate() {
+    const out = document.getElementById("aboutUpdateResult");
+    const btn = document.getElementById("btnCheckUpdate");
+    const t = (k, fb) => (window.tStr && window.tStr(k)) || fb;
+    const origLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = t("about.checking", "Checking…");
+    out.innerHTML = "";
+    try {
+        const r = await fetch("/api/check-update");
+        const j = await r.json();
+        if (j.error) {
+            out.innerHTML = `<div class="alert alert-error">${t("about.check_failed","Update check failed")}: ${escapeHtml(j.error)}</div>`;
+        } else if (j.update_available) {
+            const dl = j.spk_download ? `<a class="btn btn-primary" href="${escapeHtml(j.spk_download)}" target="_blank" rel="noopener">⬇ ${t("about.download_spk","Download SPK")}</a>` : "";
+            out.innerHTML = `
+                <div class="alert" style="background:rgba(22,163,74,.10); color:var(--ok); border:1px solid rgba(22,163,74,.25); padding:12px;">
+                    <div style="font-weight:600; margin-bottom:6px;">🎉 ${t("about.update_available","Update available")}: <code>${escapeHtml(j.current)}</code> → <code>${escapeHtml(j.latest)}</code></div>
+                    <div class="hint">${t("about.published","Published")}: ${escapeHtml((j.published_at || "").slice(0,10))}</div>
+                    <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+                        ${dl}
+                        <a class="btn" href="${escapeHtml(j.release_url)}" target="_blank" rel="noopener">📝 ${t("about.release_notes","Release notes")}</a>
+                    </div>
+                    <details style="margin-top:10px;">
+                        <summary style="cursor:pointer; font-size:13px;">${t("about.show_notes","Show release notes")}</summary>
+                        <pre style="white-space:pre-wrap; margin-top:8px; font-size:12px; line-height:1.5;">${escapeHtml(j.release_notes || "")}</pre>
+                    </details>
+                </div>`;
+        } else if (j.latest) {
+            out.innerHTML = `<div class="alert alert-info">✓ ${t("about.up_to_date","You're on the latest version")} (<code>${escapeHtml(j.current)}</code>).</div>`;
+        } else {
+            out.innerHTML = `<div class="alert alert-info">${t("about.no_release","No releases published yet.")}</div>`;
+        }
+    } catch (e) {
+        out.innerHTML = `<div class="alert alert-error">${escapeHtml(String(e))}</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = origLabel;
+    }
+}
+document.addEventListener("DOMContentLoaded", () => {
+    const b = document.getElementById("btnCheckUpdate");
+    if (b) b.addEventListener("click", checkForUpdate);
+    const m = document.getElementById("btnMcpCall");
+    if (m) m.addEventListener("click", callMcpTool);
+});
+
+// ─── MCP tab ──────────────────────────────────────────────────────────────
+let MCP_TOOLS = [];   // cached flat tool list for the select
+
+async function renderMcpTab() {
+    const list   = document.getElementById("mcpServersList");
+    const select = document.getElementById("mcpToolSelect");
+    const audit  = document.getElementById("mcpAuditCard");
+    const t = (k, fb) => (window.tStr && window.tStr(k)) || fb;
+
+    // ── Server list ─────────────────────────────────────────────────────
+    try {
+        const r = await fetch("/api/mcp/servers");
+        if (r.status === 503) {
+            list.innerHTML = `<div class="alert alert-info">${t("mcp.unavailable","MCP runtime unavailable on this install.")}</div>`;
+            select.innerHTML = "";
+            return;
+        }
+        const j = await r.json();
+        const servers = j.servers || [];
+        if (!servers.length) {
+            list.innerHTML = `<div class="hint">${t("mcp.no_servers_yet","No MCP servers registered yet.")}</div>`;
+        } else {
+            list.innerHTML = servers.map(s => `
+                <div class="card" style="background:var(--bg-elev); padding:12px 14px; margin-bottom:8px;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; flex:1; min-width:0;">
+                            <input type="checkbox" data-mcp-toggle="${escapeHtml(s.name)}" ${s.enabled ? "checked" : ""}>
+                            <b>${escapeHtml(s.title || s.name)}</b>
+                            <span class="hint" style="margin:0;">(${s.tool_count} ${t("mcp.tools","tools")})</span>
+                        </label>
+                    </div>
+                    <div class="hint" style="margin-top:4px;">${escapeHtml(s.description || "")}</div>
+                    <details style="margin-top:6px;">
+                        <summary style="cursor:pointer; font-size:12px;">${t("mcp.show_tools","Tool list")}</summary>
+                        <ul style="margin:6px 0 0 14px; font-size:12px; line-height:1.5;">
+                            ${(s.tools || []).map(tool => `<li><code>${escapeHtml(tool.name)}</code> — ${escapeHtml(tool.description || "")}</li>`).join("")}
+                        </ul>
+                    </details>
+                </div>
+            `).join("");
+            list.querySelectorAll("[data-mcp-toggle]").forEach(cb => {
+                cb.addEventListener("change", async () => {
+                    const name = cb.dataset.mcpToggle;
+                    const r = await fetch(`/api/mcp/servers/${encodeURIComponent(name)}/toggle`, {
+                        method:  "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body:    JSON.stringify({enabled: cb.checked}),
+                    });
+                    if (!r.ok) { cb.checked = !cb.checked; }
+                });
+            });
+        }
+
+        // Populate the test-call tool select
+        MCP_TOOLS = [];
+        servers.forEach(s => s.enabled && (s.tools || []).forEach(tool => MCP_TOOLS.push({name: tool.name, server: s.name})));
+        select.innerHTML = MCP_TOOLS.map(t => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join("");
+    } catch (e) {
+        list.innerHTML = `<div class="alert alert-error">${escapeHtml(String(e))}</div>`;
+    }
+
+    // ── Audit log (admin only) ──────────────────────────────────────────
+    try {
+        const r = await fetch("/api/mcp/audit");
+        if (r.status === 403) {
+            audit.innerHTML = `<div class="hint" style="padding:14px;">${t("mcp.audit_admin_only","Admin only.")}</div>`;
+            return;
+        }
+        const j = await r.json();
+        const entries = j.entries || [];
+        if (!entries.length) {
+            audit.innerHTML = `<div class="hint" style="padding:14px;">${t("mcp.audit_empty","No tool calls yet.")}</div>`;
+        } else {
+            audit.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
+                <thead><tr style="background:var(--bg-elev);">
+                    <th style="text-align:left; padding:6px 10px;">${t("mcp.audit_time","Time")}</th>
+                    <th style="text-align:left; padding:6px 10px;">${t("mcp.audit_tool","Tool")}</th>
+                    <th style="text-align:right; padding:6px 10px;">${t("mcp.audit_dur","ms")}</th>
+                    <th style="text-align:left; padding:6px 10px;">${t("mcp.audit_result","Result")}</th>
+                </tr></thead><tbody>
+                ${entries.map(e => `
+                    <tr style="border-top:1px solid var(--border);">
+                        <td style="padding:6px 10px; font-family:monospace; color:var(--text-dim);">${new Date(e.ts * 1000).toLocaleString()}</td>
+                        <td style="padding:6px 10px;"><code>${escapeHtml(e.tool)}</code></td>
+                        <td style="padding:6px 10px; text-align:right;">${e.duration_ms}</td>
+                        <td style="padding:6px 10px;">${e.ok ? `<span style="color:var(--ok);">✓ ${e.result_size}b</span>` : `<span style="color:var(--danger);">✗ ${escapeHtml(e.error||"")}</span>`}</td>
+                    </tr>`).join("")}
+            </tbody></table>`;
+        }
+    } catch (e) {
+        audit.innerHTML = `<div class="alert alert-error" style="margin:10px;">${escapeHtml(String(e))}</div>`;
+    }
+}
+
+async function callMcpTool() {
+    const select = document.getElementById("mcpToolSelect");
+    const argsEl = document.getElementById("mcpToolArgs");
+    const out    = document.getElementById("mcpToolResult");
+    const tool   = select.value;
+    let args = {};
+    const raw = (argsEl.value || "").trim();
+    if (raw) {
+        try { args = JSON.parse(raw); }
+        catch (e) {
+            out.innerHTML = `<div class="alert alert-error">JSON parse error: ${escapeHtml(String(e))}</div>`;
+            return;
+        }
+    }
+    out.innerHTML = `<div class="hint">Running ${escapeHtml(tool)}…</div>`;
+    try {
+        const r = await fetch("/api/mcp/call", {
+            method:  "POST",
+            headers: {"Content-Type": "application/json"},
+            body:    JSON.stringify({tool, args}),
+        });
+        const j = await r.json();
+        const pretty = JSON.stringify(j, null, 2);
+        out.innerHTML = `<pre style="background:var(--bg); padding:10px; border-radius:6px; max-height:300px; overflow:auto; font-size:11px;">${escapeHtml(pretty)}</pre>`;
+        // refresh audit log
+        const audit = document.getElementById("mcpAuditCard");
+        if (audit) renderMcpTab();
+    } catch (e) {
+        out.innerHTML = `<div class="alert alert-error">${escapeHtml(String(e))}</div>`;
+    }
+}
+
 function saveSettings() {
     const s = STATE.settings;
     s.system  = $("#cfgSystem").value;

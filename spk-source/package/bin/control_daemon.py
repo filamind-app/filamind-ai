@@ -44,10 +44,31 @@ CONFIG_FILE  = ETC_DIR + "/filamindai.conf"
 LEGACY_CONFIG_FILE = "/var/packages/SaynologyAI/etc/saynologyai.conf"  # back-compat read on first run
 SECRET_FILE  = ETC_DIR + "/secret.key"
 DB_FILE      = ETC_DIR + "/users.db"
+MCP_DB_FILE  = ETC_DIR + "/mcp.db"
 WEB_DIR      = INSTALL_DIR + "/web"
 LLAMA_BIN    = INSTALL_DIR + "/bin/llama-server"
 LOG_FILE     = INSTALL_DIR + "/var/llama-server.log"
 INTERNAL_PORT = 8180
+
+# MCP runtime — loaded lazily so the daemon still starts if the module is missing.
+_MCP_REGISTRY = None
+def _get_mcp_registry():
+    """Lazy-init the MCP registry. Returns None on import error (tools then unavailable)."""
+    global _MCP_REGISTRY
+    if _MCP_REGISTRY is not None:
+        return _MCP_REGISTRY
+    try:
+        import sys as _sys
+        _sys.path.insert(0, INSTALL_DIR + "/bin")
+        from mcp_runtime import MCPRegistry          # noqa: WPS433 — runtime import is intentional
+        from mcp_servers import register_builtin_servers
+        os.makedirs(ETC_DIR, exist_ok=True)
+        _MCP_REGISTRY = MCPRegistry(MCP_DB_FILE)
+        register_builtin_servers(_MCP_REGISTRY)
+        return _MCP_REGISTRY
+    except Exception as _e:  # noqa: BLE001
+        sys.stderr.write(f"[mcp] runtime unavailable: {_e}\n")
+        return None
 
 DEFAULT_CFG = {
     "MODEL_PATH":    "",
@@ -839,7 +860,161 @@ def _sanitize_v1_body(raw: bytes) -> bytes:
     return json.dumps(out, ensure_ascii=False).encode("utf-8")
 
 
-DAEMON_VERSION = "1.2.4"
+DAEMON_VERSION = "1.3.0"
+REPO_OWNER     = "filamind-app"
+REPO_NAME      = "filamind-ai"
+REPO_URL       = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
+RELEASES_API   = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
+RELEASES_URL   = f"{REPO_URL}/releases"
+CHANGELOG_RAW  = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/CHANGELOG.md"
+
+# Per-package on-disk paths for static metadata (set at build time)
+INFO_FILE      = "/var/packages/FilamindAI/INFO"        # available on running NAS
+CHANGELOG_FILE = INSTALL_DIR + "/CHANGELOG.md"          # shipped in package
+BUILD_INFO     = INSTALL_DIR + "/BUILD_INFO"            # optional: git sha + date
+
+# Cached results — refreshed once per hour to avoid hammering GitHub.
+_UPDATE_CACHE = {"checked_at": 0, "data": None}
+_UPDATE_CACHE_TTL = 3600   # seconds
+
+
+# ───── Release / version helpers ────────────────────────────────────────────
+def _read_text(path, default=""):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return default
+
+
+def _parse_info_field(content, key):
+    """Pull a `key="value"` line out of the SPK INFO file."""
+    import re
+    m = re.search(r'^' + re.escape(key) + r'="([^"]*)"', content, re.M)
+    return m.group(1) if m else None
+
+
+def _read_build_info():
+    """Optional BUILD_INFO file written at SPK build time. Format: KEY=VALUE per line."""
+    info = {}
+    raw = _read_text(BUILD_INFO)
+    for line in raw.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            info[k.strip()] = v.strip()
+    return info
+
+
+def _semver_compare(a, b):
+    """Return -1/0/1 comparing two version strings like 1.2.5 vs 1.2.4-0029.
+    Tolerant: strips leading 'v', splits on dashes, compares numeric parts."""
+    def normalize(s):
+        s = (s or "").lstrip("v").strip()
+        s = s.split("-")[0]   # drop -0029 build suffix
+        parts = []
+        for p in s.split("."):
+            try: parts.append(int(p))
+            except ValueError: parts.append(0)
+        while len(parts) < 3: parts.append(0)
+        return parts[:3]
+    na, nb = normalize(a), normalize(b)
+    return (na > nb) - (na < nb)
+
+
+def _get_version_info():
+    """Rich version + build + device info served by /api/version."""
+    info_content = _read_text(INFO_FILE)
+    build = _read_build_info()
+    dsm_version = ""
+    try:
+        # /etc.defaults/synoinfo.conf is shipped by DSM; harmless on dev hosts.
+        synoinfo = _read_text("/etc.defaults/synoinfo.conf")
+        import re
+        m = re.search(r'^productversion="([^"]+)"', synoinfo, re.M)
+        if m: dsm_version = m.group(1)
+        m = re.search(r'^buildnumber="([^"]+)"', synoinfo, re.M)
+        if m: dsm_version += f"-{m.group(1)}"
+    except Exception:
+        pass
+
+    # GPU detection (best-effort)
+    engine = "llama.cpp (cpu)"
+    try:
+        if os.path.exists("/dev/nvidia0"):
+            engine = "llama.cpp b1620 + CUDA 10.1 (GPU)"
+        else:
+            # Detect AVX2 vs SSE-only for the CPU build description
+            cpu = _read_text("/proc/cpuinfo")
+            if "avx2" in cpu:
+                engine = "llama.cpp latest + CPU AVX2"
+    except Exception:
+        pass
+
+    return {
+        "daemon_version":  DAEMON_VERSION,
+        "package_name":    _parse_info_field(info_content, "package") or "FilamindAI",
+        "package_version": _parse_info_field(info_content, "version") or DAEMON_VERSION,
+        "displayname":     _parse_info_field(info_content, "displayname") or "Filamind AI",
+        "model":           _parse_info_field(info_content, "model") or "",
+        "arch":            _parse_info_field(info_content, "arch") or "",
+        "maintainer":      _parse_info_field(info_content, "maintainer") or "Abdelmonem Awad",
+        "dsm_version":     dsm_version,
+        "engine":          engine,
+        "build_date":      build.get("BUILD_DATE", ""),
+        "git_sha":         build.get("GIT_SHA", ""),
+        "git_branch":      build.get("GIT_BRANCH", ""),
+        "repo_url":        REPO_URL,
+        "releases_url":    RELEASES_URL,
+        "changelog_url":   f"{REPO_URL}/blob/main/CHANGELOG.md",
+    }
+
+
+def _check_for_update():
+    """Hit GitHub Releases API (cached) and return update status."""
+    import time, urllib.request
+    now = time.time()
+    if _UPDATE_CACHE["data"] and (now - _UPDATE_CACHE["checked_at"]) < _UPDATE_CACHE_TTL:
+        return _UPDATE_CACHE["data"]
+
+    out = {
+        "current":          DAEMON_VERSION,
+        "latest":           None,
+        "update_available": False,
+        "release_url":      None,
+        "release_name":     None,
+        "release_notes":    None,
+        "published_at":     None,
+        "spk_download":     None,
+        "error":            None,
+        "checked_at":       int(now),
+    }
+    try:
+        req = urllib.request.Request(
+            RELEASES_API,
+            headers={"Accept": "application/vnd.github+json",
+                     "User-Agent": f"FilamindAI/{DAEMON_VERSION}"},
+        )
+        with urllib.request.urlopen(req, timeout=6) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        latest = data.get("tag_name", "")
+        out["latest"]         = latest
+        out["release_url"]    = data.get("html_url")
+        out["release_name"]   = data.get("name") or latest
+        out["release_notes"]  = data.get("body") or ""
+        out["published_at"]   = data.get("published_at")
+        # First .spk asset wins
+        for a in data.get("assets", []):
+            if a.get("name", "").endswith(".spk"):
+                out["spk_download"] = a.get("browser_download_url")
+                break
+        if latest and _semver_compare(latest, DAEMON_VERSION) > 0:
+            out["update_available"] = True
+    except Exception as e:
+        out["error"] = str(e)[:200]
+
+    _UPDATE_CACHE["data"] = out
+    _UPDATE_CACHE["checked_at"] = now
+    return out
 
 
 def _is_safe_model_path(path):
@@ -1533,7 +1708,38 @@ class Handler(BaseHTTPRequestHandler):
                 "daemon_version": DAEMON_VERSION,
             })
         if path == "/api/version":
-            return self._send_json(200, {"daemon_version": DAEMON_VERSION})
+            return self._send_json(200, _get_version_info())
+        if path == "/api/changelog":
+            # Serve the shipped CHANGELOG.md as text. Falls back to GitHub raw URL note.
+            md = _read_text(CHANGELOG_FILE)
+            if not md:
+                md = (f"# Filamind AI\n\nFull changelog: {REPO_URL}/blob/main/CHANGELOG.md\n"
+                      f"(Local copy not bundled in this build.)\n")
+            return self._send_text(200, md, "text/markdown; charset=utf-8")
+        if path == "/api/check-update":
+            return self._send_json(200, _check_for_update())
+        # ─── MCP read endpoints ──────────────────────────────────────────
+        if path == "/api/mcp/servers":
+            u = self._require_user()
+            if not u: return
+            r = _get_mcp_registry()
+            if r is None:
+                return self._send_json(503, {"error": "mcp_unavailable", "servers": []})
+            return self._send_json(200, {"servers": r.servers()})
+        if path == "/api/mcp/tools":
+            u = self._require_user()
+            if not u: return
+            r = _get_mcp_registry()
+            if r is None:
+                return self._send_json(503, {"error": "mcp_unavailable", "tools": []})
+            return self._send_json(200, {"tools": r.list_tools()})
+        if path == "/api/mcp/audit":
+            u = self._require_user("admin")
+            if not u: return
+            r = _get_mcp_registry()
+            if r is None:
+                return self._send_json(503, {"error": "mcp_unavailable", "entries": []})
+            return self._send_json(200, {"entries": r.recent_audit(limit=100)})
         if path == "/api/diagnose":
             u = self._require_user("admin")
             if not u: return
@@ -1699,6 +1905,42 @@ class Handler(BaseHTTPRequestHandler):
             if not self._require_user("admin"): return
             STATE["request_restart"] = True
             return self._send_json(200, {"ok": True})
+
+        # ─── MCP write/call endpoints ────────────────────────────────────
+        # Toggle a server: POST /api/mcp/servers/<name>/toggle  body {"enabled": true|false}
+        if path.startswith("/api/mcp/servers/") and path.endswith("/toggle"):
+            u = self._require_user("admin")
+            if not u: return
+            name = path[len("/api/mcp/servers/"):-len("/toggle")]
+            r = _get_mcp_registry()
+            if r is None:
+                return self._send_json(503, {"error": "mcp_unavailable"})
+            data = self._read_body() or {}
+            try:
+                r.set_enabled(name, bool(data.get("enabled", True)))
+                return self._send_json(200, {"ok": True, "name": name, "enabled": bool(data.get("enabled", True))})
+            except Exception as e:
+                return self._send_json(400, {"error": str(e)[:200]})
+
+        # Call a tool: POST /api/mcp/call  body {"tool": "...", "args": {...}}
+        if path == "/api/mcp/call":
+            user = self._require_user()
+            if not user: return
+            r = _get_mcp_registry()
+            if r is None:
+                return self._send_json(503, {"error": "mcp_unavailable"})
+            data = self._read_body() or {}
+            tool_name = (data.get("tool") or "").strip()
+            args      = data.get("args") or {}
+            if not tool_name:
+                return self._send_json(400, {"error": "tool name required"})
+            try:
+                out = r.call(tool_name, args, user_id=user["id"])
+                status = 200 if out.get("ok") else 400
+                return self._send_json(status, out)
+            except Exception as e:
+                # rate-limit / hop-limit / tool-not-found → 400 with message
+                return self._send_json(400, {"ok": False, "error": str(e)[:200], "type": type(e).__name__})
         if path == "/api/select-model":
             if not self._require_user("admin"): return
             if not _csrf_ok(self): return self._send_json(403, {"error": "csrf_blocked"})
