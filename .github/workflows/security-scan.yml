@@ -20,7 +20,7 @@ jobs:
     name: gitleaks (secret scan)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
@@ -36,7 +36,7 @@ jobs:
       matrix:
         language: [python, javascript]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
@@ -50,7 +50,7 @@ jobs:
     name: Syntax sanity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: JSON validity (i18n + manifest + ui/config)
         run: |
           for f in $(git ls-files '*.json' 'spk-source/package/ui/config'); do
@@ -80,7 +80,7 @@ jobs:
     name: Build SPK
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run build_spk.sh (stubbing device-specific binaries)
         run: |
           # main lacks the device-specific binaries; the build script tolerates
