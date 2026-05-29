@@ -47,6 +47,18 @@ import threading
 from typing import Any, Callable
 
 
+# ─── Per-call context ──────────────────────────────────────────────────────
+# Tool handlers take only `args`, but some (e.g. the memory store) need to know
+# WHO is calling so they can scope data per-user. The registry stashes the
+# caller's user_id in this thread-local immediately around handler execution;
+# handlers read it via current_user_id(). None == anonymous/system.
+_call_ctx = threading.local()
+
+
+def current_user_id() -> int | None:
+    return getattr(_call_ctx, "user_id", None)
+
+
 # ─── Errors ────────────────────────────────────────────────────────────────
 class MCPError(Exception):
     """Base class for any runtime-rejected call (limit hit, missing tool, etc.)."""
@@ -174,6 +186,11 @@ class MCPRegistry:
         return c
 
     def _init_db(self):
+        import os
+        try:
+            os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
+        except Exception:
+            pass
         with self._conn() as c:
             c.execute("""
                 CREATE TABLE IF NOT EXISTS mcp_audit (
@@ -199,6 +216,12 @@ class MCPRegistry:
                     config_json TEXT NOT NULL DEFAULT '{}'
                 )
             """)
+        # Audit log can contain tool args (file paths, queries) — keep it private.
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.chmod(self.db_path + suffix, 0o600)
+            except Exception:
+                pass
 
     # ─── Registration ────────────────────────────────────────────────────
     def register(self, server: ToolServer) -> None:
@@ -324,10 +347,13 @@ class MCPRegistry:
 
         t0 = time.time()
         ok, result, error = True, None, None
+        _call_ctx.user_id = user_id
         try:
             result = tool.handler(args or {})
         except Exception as e:  # noqa: BLE001 — tool authors are trusted in-process
             ok, error = False, str(e)[:400]
+        finally:
+            _call_ctx.user_id = None
         duration_ms = int((time.time() - t0) * 1000)
 
         # Audit log
