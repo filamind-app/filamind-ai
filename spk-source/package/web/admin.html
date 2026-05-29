@@ -91,6 +91,14 @@ function fmtDate(ts) {
     return new Date(ts * 1000).toLocaleString();
 }
 
+// Escape user-controlled strings before injecting into innerHTML — a non-admin
+// can set their own display_name, so an unescaped name like <img onerror=...>
+// would execute in the admin's browser when they open this page (stored XSS).
+function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g,
+        c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
 async function loadUsers() {
     const r = await fetch("/api/users");
     if (!r.ok) return;
@@ -98,12 +106,12 @@ async function loadUsers() {
     const tbody = $("#userRows");
     tbody.innerHTML = j.users.map(u => `
         <tr>
-            <td>${u.username}</td>
-            <td>${u.display_name || ""}</td>
-            <td><span class="badge badge-${u.role}">${u.role}</span></td>
+            <td>${esc(u.username)}</td>
+            <td>${esc(u.display_name || "")}</td>
+            <td><span class="badge badge-${esc(u.role)}">${esc(u.role)}</span></td>
             <td>${fmtDate(u.created_at)}</td>
             <td>${fmtDate(u.last_login)}</td>
-            <td>${u.id !== me.id ? `<button class="btn btn-danger" data-delete="${u.id}" data-name="${u.username}">${window.t("admin.delete")||"Delete"}</button>` : ""}</td>
+            <td>${u.id !== me.id ? `<button class="btn btn-danger" data-delete="${esc(u.id)}" data-name="${esc(u.username)}">${esc(window.t("admin.delete")||"Delete")}</button>` : ""}</td>
         </tr>
     `).join("");
     tbody.querySelectorAll("[data-delete]").forEach(b => {

@@ -16,27 +16,40 @@
         "your_nas": "جهاز NAS الخاص بك"
     },
     "errors": {
-        "model_load_failed": "تعذّر تحميل النموذج",
-        "pick_smaller_model": "اختر نموذجاً أصغر",
-        "try_cloud_hint": "أو افتح الإعدادات ← المزوّدون واستخدم Claude أو ChatGPT أو Gemini بدلاً منه.",
-        "export_failed": "فشل التصدير: ",
-        "switch_failed": "تعذّر تبديل النموذج: "
+        "generic": "حدث خطأ ما.",
+        "http_error": "HTTP {status}: {body}",
+        "network": "خطأ في الشبكة",
+        "timeout": "انتهت مهلة الطلب.",
+        "auth_required": "تسجيل الدخول مطلوب.",
+        "forbidden": "ليس لديك الصلاحيات اللازمة.",
+        "not_found": "غير موجود.",
+        "save_failed": "فشل الحفظ",
+        "load_failed": "فشل التحميل"
     },
     "actions": {
-        "edit": "تعديل",
         "save": "حفظ",
         "cancel": "إلغاء",
-        "save_resend": "حفظ وإعادة الإرسال",
-        "search_conversations": "ابحث في المحادثات…",
-        "no_matches": "لا توجد نتائج",
-        "no_conversation": "لا توجد محادثة نشطة.",
-        "export_conversation": "تصدير المحادثة",
-        "voice_input": "إدخال صوتي"
+        "delete": "حذف",
+        "create": "إنشاء",
+        "edit": "تعديل",
+        "close": "إغلاق",
+        "copy": "نسخ",
+        "copied": "تم النسخ",
+        "refresh": "تحديث",
+        "retry": "إعادة المحاولة",
+        "confirm": "تأكيد",
+        "back": "رجوع",
+        "next": "التالي",
+        "ok": "حسناً"
     },
     "confirms": {
-        "export_format": "تصدير بصيغة 'md' (Markdown) أم 'json'؟",
-        "revoke_key": "هل تريد إلغاء هذا المفتاح؟",
-        "delete_agent": "حذف هذا الوكيل؟"
+        "delete_user": "حذف المستخدم {username}؟ لا يمكن التراجع عن هذه العملية.",
+        "delete_agent": "حذف هذا الوكيل؟",
+        "revoke_key": "إلغاء هذا المفتاح؟",
+        "switch_model": "تبديل إلى النموذج:\n{path}\n\nسيتم ضبط إعدادات الموارد (حجم السياق وطبقات الـ GPU) تلقائياً بحسب حجم النموذج. سيُعاد تشغيل المحرك، وستكون المحادثة غير متاحة لثوانٍ معدودة.",
+        "safe_defaults": "ضبط إعدادات الذاكرة تلقائياً للنموذج المحمَّل حالياً وإعادة تشغيل المحرك؟",
+        "force_restart": "إيقاف محرك الاستدلال وإعادة تشغيله من جديد؟ سيتم فقدان أي طلبات قيد المعالجة.",
+        "unsaved_changes": "لديك تغييرات غير محفوظة. هل ترغب في تجاهلها؟"
     },
     "toolbar": {
         "agent": "الوكيل",
@@ -61,38 +74,22 @@
         "summary_template": "📋 قالب: لخّص"
     },
     "providers": {
-        "get_key": "احصل على مفتاح API",
-        "how_to": "كيف تحصل على المفتاح",
-        "key_format": "صيغة المفتاح",
-        "pricing": "التسعير",
-        "console": "وحدة التحكم",
+        "title": "مزوّدو الذكاء الاصطناعي السحابيون",
+        "intro": "اضبط مفاتيح API لاستخدام نماذج خارجية (Claude و ChatGPT و Gemini) من نفس واجهة المحادثة. يتم اختيار المزوّد النشط من القائمة المنسدلة بجانب وضع المحادثة في الأعلى.",
+        "save": "حفظ المزوّدين",
         "enable": "تفعيل",
         "api_key": "مفتاح API",
+        "api_key_set": "(محفوظ — اتركه فارغاً للإبقاء عليه)",
+        "api_key_placeholder": "الصق مفتاح API الخاص بك",
         "default_model": "النموذج الافتراضي",
-        "refresh_from_api": "تحديث من API",
-        "models_cached": "نموذج مخزّن. اضغط تحديث بعد حفظ المفتاح لجلب القائمة الحية.",
-        "key_set_keep": "(محفوظ — اتركه فارغاً للإبقاء)",
-        "paste_key": "الصق مفتاح API",
-        "base_url": "عنوان أساسي",
-        "base_url_hint": "غيّره فقط إذا كنت تستخدم بوابة ذاتية الاستضافة أو وكيلاً (مثل LiteLLM / OpenRouter).",
-        "openai": {
-            "step1": "سجّل دخول أو أنشئ حساب OpenAI.",
-            "step2": "أضف وسيلة دفع في قسم Billing (إجبارية — لا توجد حصة مجانية لـ API).",
-            "step3": "افتح API keys → 'Create new secret key' → سمّه 'Filamind AI' → انسخه.",
-            "step4": "الصقه أدناه واختر نموذجاً افتراضياً (مثلاً gpt-4o-mini للاقتصاد، gpt-4o للجودة)."
-        },
-        "anthropic": {
-            "step1": "سجّل دخول أو أنشئ حساب Anthropic Console.",
-            "step2": "أضف رصيداً (5$ كحد أدنى) في Billing — لا توجد حصة مجانية في 2025.",
-            "step3": "Settings → API keys → 'Create Key' → سمّه → انسخه. يبدأ بـ sk-ant-api03-",
-            "step4": "الصقه أدناه. claude-3-5-haiku-20241022 هو الأرخص؛ claude-sonnet-4-5 الأقوى."
-        },
-        "gemini": {
-            "step1": "سجّل دخول بحساب Google في Google AI Studio.",
-            "step2": "افتح الرابط أدناه → 'Create API key' → 'Create API key in new project'.",
-            "step3": "انسخ المفتاح (يبدأ بـ AIzaSy). يعمل على الـ FREE tier — لا تحتاج بطاقة للبدء.",
-            "step4": "الصقه أدناه. الافتراضي: gemini-2.5-flash (توازن جيد). gemini-2.5-flash-lite له أعلى حصة مجانية."
-        }
+        "local": "محلي (GPU)",
+        "openai": "ChatGPT",
+        "anthropic": "Claude",
+        "gemini": "Gemini",
+        "label": "المزوّد",
+        "help_openai": "احصل على مفتاح من <code>platform.openai.com/api-keys</code>.",
+        "help_anthropic": "احصل على مفتاح من <code>console.anthropic.com/settings/keys</code>.",
+        "help_gemini": "احصل على مفتاح من <code>aistudio.google.com/apikey</code>."
     },
     "mcp": {
         "title": "بروتوكول سياق النموذج (MCP)",
@@ -120,7 +117,9 @@
         "audit_tool": "الأداة",
         "audit_dur": "ms",
         "audit_result": "النتيجة",
-        "next_title": "قريباً في v1.3.1"
+        "next_title": "على خارطة الطريق",
+        "manual_note": "⚠ الحالة الحالية: الأدوات تعمل <b>يدوياً</b> من هذا القسم (اختر أداة ← تشغيل). المساعد <b>لا يستدعي الأدوات تلقائياً أثناء المحادثة</b> — وهذا الهدف التالي. البنية والـ 8 خوادم أدناه تعمل بالكامل عند تشغيلها هنا.",
+        "roadmap": "استدعاء الأدوات داخل المحادثة (النموذج يستدعيها تلقائياً)، بالإضافة إلى تكاملات سحابية: بحث ويب، GitHub، Home Assistant، FileStation، Surveillance Station — تحتاج مفاتيح API خاصة."
     },
     "about": {
         "tab": "حول التطبيق",
@@ -137,7 +136,7 @@
         "check_failed": "فشل فحص التحديثات",
         "up_to_date": "أنت على أحدث إصدار",
         "no_release": "لم يُنشر أي إصدار بعد.",
-        "dsm_hint": "للتحديث بضغطة واحدة من Package Center، أضف مصدر Filamind AI في: Package Center ← Settings ← Package Sources ← Add ← <code>https://filamind-app.github.io/filamind-ai/</code>",
+        "dsm_hint": "التحديث حالياً: استخدم هذا الزر، أو نزّل ملف SPK من صفحة Releases وثبّته عبر Package Center ← Manual Install. (التحديث بضغطة واحدة عبر مصدر DSM مخطّط لكنه يحتاج خادماً ديناميكياً — صفحات GitHub الثابتة لا تستطيع الرد على طلبات DSM بعد.)",
         "changelog": "سجل الإصدارات",
         "links": "روابط مفيدة",
         "source_code": "📦 الكود المصدري",
@@ -157,8 +156,13 @@
         "row_maintainer": "المطوّر"
     },
     "connection": {
-        "use_streaming": "البث الفوري للردود (تجريبي)",
-        "use_streaming_hint": "عند التفعيل، تظهر الردود كلمة بكلمة. مُعطَّل افتراضياً لأن llama.cpp b1620 يعطي 500 مع بعض تركيبات البث؛ بدون بث أكثر موثوقية."
+        "server_url": "عنوان السيرفر",
+        "server_url_placeholder": "تلقائي (نفس المصدر)",
+        "server_url_hint": "اتركه فارغاً عند فتح المحادثة من أيقونة DSM. اضبطه على <code>http://NAS-IP:8181</code> عند الوصول من جهاز آخر.",
+        "poll_interval": "فترة فحص حالة السيرفر (بالثواني)",
+        "poll_interval_hint": "كم مرة يتم فحص حالة السيرفر. كلما زادت، قلّت ضوضاء الشبكة.",
+        "streaming": "البث المباشر للردود (تجريبي)",
+        "streaming_hint": "عند التفعيل، يظهر رد المساعد كلمةً كلمة. مُعطَّل افتراضياً لأن llama.cpp b1620 يُرجع HTTP 500 في بعض حالات البث؛ الوضع العادي بدون بث أكثر استقراراً."
     },
     "setup": {
         "title": "إنشاء حساب المسؤول الأول",
@@ -363,24 +367,6 @@
         "url_required": "الصق رابطاً أولاً.",
         "control_api_unreachable": "تعذّر الوصول إلى واجهة التحكم: {error}. افتح رابط المحادثة من أيقونة DSM للحصول على كامل المزايا."
     },
-    "providers": {
-        "title": "مزوّدو الذكاء الاصطناعي السحابيون",
-        "intro": "اضبط مفاتيح API لاستخدام نماذج خارجية (Claude و ChatGPT و Gemini) من نفس واجهة المحادثة. يتم اختيار المزوّد النشط من القائمة المنسدلة بجانب وضع المحادثة في الأعلى.",
-        "save": "حفظ المزوّدين",
-        "enable": "تفعيل",
-        "api_key": "مفتاح API",
-        "api_key_set": "(محفوظ — اتركه فارغاً للإبقاء عليه)",
-        "api_key_placeholder": "الصق مفتاح API الخاص بك",
-        "default_model": "النموذج الافتراضي",
-        "local": "محلي (GPU)",
-        "openai": "ChatGPT",
-        "anthropic": "Claude",
-        "gemini": "Gemini",
-        "label": "المزوّد",
-        "help_openai": "احصل على مفتاح من <code>platform.openai.com/api-keys</code>.",
-        "help_anthropic": "احصل على مفتاح من <code>console.anthropic.com/settings/keys</code>.",
-        "help_gemini": "احصل على مفتاح من <code>aistudio.google.com/apikey</code>."
-    },
     "system": {
         "live_info": "معلومات النظام المباشرة",
         "loading": "جاري التحميل…",
@@ -403,15 +389,6 @@
         "utilization": "الاستخدام",
         "temperature": "الحرارة",
         "force_restart_confirm": "إيقاف محرك الاستدلال وإعادة تشغيله من جديد؟ سيتم فقدان أي طلبات قيد المعالجة."
-    },
-    "connection": {
-        "server_url": "عنوان السيرفر",
-        "server_url_placeholder": "تلقائي (نفس المصدر)",
-        "server_url_hint": "اتركه فارغاً عند فتح المحادثة من أيقونة DSM. اضبطه على <code>http://NAS-IP:8181</code> عند الوصول من جهاز آخر.",
-        "poll_interval": "فترة فحص حالة السيرفر (بالثواني)",
-        "poll_interval_hint": "كم مرة يتم فحص حالة السيرفر. كلما زادت، قلّت ضوضاء الشبكة.",
-        "streaming": "البث المباشر للردود (تجريبي)",
-        "streaming_hint": "عند التفعيل، يظهر رد المساعد كلمةً كلمة. مُعطَّل افتراضياً لأن llama.cpp b1620 يُرجع HTTP 500 في بعض حالات البث؛ الوضع العادي بدون بث أكثر استقراراً."
     },
     "agents": {
         "title": "الوكلاء (شخصيات المحادثة)",
@@ -573,33 +550,6 @@
         "snippet_python_ready": "كود بايثون جاهز للنسخ (المفتاح مُضمَّن)",
         "compatible_tools": "الأدوات المتوافقة:"
     },
-    "errors": {
-        "generic": "حدث خطأ ما.",
-        "http_error": "HTTP {status}: {body}",
-        "network": "خطأ في الشبكة",
-        "timeout": "انتهت مهلة الطلب.",
-        "auth_required": "تسجيل الدخول مطلوب.",
-        "forbidden": "ليس لديك الصلاحيات اللازمة.",
-        "not_found": "غير موجود.",
-        "save_failed": "فشل الحفظ",
-        "load_failed": "فشل التحميل"
-    },
-    "actions": {
-        "save": "حفظ",
-        "cancel": "إلغاء",
-        "delete": "حذف",
-        "create": "إنشاء",
-        "edit": "تعديل",
-        "close": "إغلاق",
-        "copy": "نسخ",
-        "copied": "تم النسخ",
-        "refresh": "تحديث",
-        "retry": "إعادة المحاولة",
-        "confirm": "تأكيد",
-        "back": "رجوع",
-        "next": "التالي",
-        "ok": "حسناً"
-    },
     "placeholders": {
         "search": "بحث…",
         "username": "اسم المستخدم",
@@ -611,14 +561,5 @@
         "agent_id": "my_helper",
         "agent_name": "مساعدي",
         "agent_description": "ما الذي يقوم به هذا الوكيل؟"
-    },
-    "confirms": {
-        "delete_user": "حذف المستخدم {username}؟ لا يمكن التراجع عن هذه العملية.",
-        "delete_agent": "حذف هذا الوكيل؟",
-        "revoke_key": "إلغاء هذا المفتاح؟",
-        "switch_model": "تبديل إلى النموذج:\n{path}\n\nسيتم ضبط إعدادات الموارد (حجم السياق وطبقات الـ GPU) تلقائياً بحسب حجم النموذج. سيُعاد تشغيل المحرك، وستكون المحادثة غير متاحة لثوانٍ معدودة.",
-        "safe_defaults": "ضبط إعدادات الذاكرة تلقائياً للنموذج المحمَّل حالياً وإعادة تشغيل المحرك؟",
-        "force_restart": "إيقاف محرك الاستدلال وإعادة تشغيله من جديد؟ سيتم فقدان أي طلبات قيد المعالجة.",
-        "unsaved_changes": "لديك تغييرات غير محفوظة. هل ترغب في تجاهلها؟"
     }
 }
