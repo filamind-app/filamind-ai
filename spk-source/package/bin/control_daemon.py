@@ -19,11 +19,13 @@ Auth model
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import re
 import secrets
 import signal
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -267,8 +269,17 @@ def db():
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
+def _chmod_quiet(path, mode):
+    """Best-effort chmod — never raise (perms are defence-in-depth, not load-bearing)."""
+    try:
+        os.chmod(path, mode)
+    except Exception:
+        pass
+
+
 def db_init():
     os.makedirs(ETC_DIR, exist_ok=True)
+    _chmod_quiet(ETC_DIR, 0o700)   # etc/ holds users.db, secret.key, providers.json
     with DB_LOCK, db() as c:
         c.executescript("""
         CREATE TABLE IF NOT EXISTS users (
@@ -328,6 +339,10 @@ def db_init():
                  a["system_prompt"], a.get("model_path"),
                  a.get("temperature", 0.7), a.get("top_p", 0.95), a.get("top_k", 40),
                  a.get("max_tokens", 512), a.get("tags",""), now, now))
+    # Lock down the DB file (+ its WAL/SHM sidecars) — contains password & API-key
+    # hashes; must not be world-readable to co-resident DSM packages/users.
+    for suffix in ("", "-wal", "-shm"):
+        _chmod_quiet(DB_FILE + suffix, 0o600)
 
 
 def agent_to_dict(row):
@@ -729,8 +744,12 @@ def download_worker(download_id):
 
     info["status"] = "running"
     info["dest"] = final_path
+    # Re-validate at fetch time (the URL was checked when queued, but guard again).
+    if not _is_safe_download_url(url):
+        info["status"] = "failed"; info["error"] = "blocked_host"
+        return
     try:
-        with urllib.request.urlopen(url, timeout=60) as resp:
+        with SAFE_OPENER.open(url, timeout=60) as resp:
             total = int(resp.headers.get("Content-Length", 0))
             info["total"] = total
             with open(tmp_path, "wb") as f:
@@ -860,7 +879,7 @@ def _sanitize_v1_body(raw: bytes) -> bytes:
     return json.dumps(out, ensure_ascii=False).encode("utf-8")
 
 
-DAEMON_VERSION = "1.3.1"
+DAEMON_VERSION = "1.3.2"
 REPO_OWNER     = "filamind-app"
 REPO_NAME      = "filamind-ai"
 REPO_URL       = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
@@ -1037,45 +1056,113 @@ def _is_safe_model_path(path):
     return False
 
 
+def _host_resolves_to_blocked_ip(host):
+    """Resolve `host` and return True if ANY resolved address is non-public.
+
+    Uses socket.getaddrinfo so it normalises every IP-literal encoding the
+    string-based check used to miss: decimal (2130706433), hex (0x7f.1),
+    octal, and IPv6 literals incl. IPv4-mapped (::ffff:127.0.0.1). Fails
+    CLOSED — an unresolvable host is treated as blocked."""
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return True
+    _cgnat = ipaddress.ip_network("100.64.0.0/10")
+    for info in infos:
+        ip_str = info[4][0]
+        # Strip IPv6 zone id if present (e.g. fe80::1%eth0)
+        ip_str = ip_str.split("%", 1)[0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            return True
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+            ip = ip.ipv4_mapped
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+            return True
+        if ip.version == 4 and ip in _cgnat:
+            return True
+    return False
+
+
 def _is_safe_download_url(url):
-    """Block SSRF: refuse non-public hosts."""
+    """Block SSRF: refuse non-http(s) schemes and any host that resolves to a
+    private / loopback / link-local / CGNAT / reserved address."""
     try:
         u = urllib.parse.urlparse(url)
     except Exception:
         return False
-    if u.scheme not in ("http", "https"): return False
-    host = (u.hostname or "").lower()
-    if not host: return False
-    # block obvious private / loopback hosts (string check is enough — IP literal blockers below also catch this)
-    blocked_substrings = ("localhost", "127.", "0.0.0.0", "169.254.", "::1")
-    for b in blocked_substrings:
-        if b in host: return False
-    if host.startswith(("10.", "192.168.")): return False
-    if host.startswith("172."):
-        try:
-            second = int(host.split(".")[1])
-            if 16 <= second <= 31: return False
-        except Exception:
-            pass
-    return True
+    if u.scheme not in ("http", "https"):
+        return False
+    host = u.hostname or ""
+    if not host:
+        return False
+    return not _host_resolves_to_blocked_ip(host)
+
+
+class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Re-validate every redirect target against the SSRF guard before
+    following it — defeats the 'public URL 302s to 169.254.169.254' bypass."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not _is_safe_download_url(newurl):
+            raise urllib.error.HTTPError(
+                newurl, code, "redirect to blocked host", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+# Opener that validates redirects. Used by the model downloader.
+SAFE_OPENER = urllib.request.build_opener(_ValidatingRedirectHandler)
 
 
 def _csrf_ok(handler):
-    """Lightweight CSRF check: a state-mutating call from a browser must
-    either come from the same origin OR send our private fetch header.
-    Bearer-authenticated API clients bypass (no cookie, so no CSRF surface)."""
+    """CSRF check for state-mutating requests.
+
+    Bearer-authenticated API clients are exempt (no ambient cookie → no CSRF
+    surface). Everyone else must carry an Origin (or Referer) whose host:port
+    EXACTLY matches the Host header. Uses real URL parsing — not the old
+    substring match that `https://evil/%2f%2f<host>` could defeat. Fails
+    CLOSED when no Origin/Referer is present."""
     if handler.headers.get("Authorization", "").startswith("Bearer "):
         return True
-    origin = handler.headers.get("Origin", "")
-    referer = handler.headers.get("Referer", "")
-    host_hdr = handler.headers.get("Host", "")
-    if not origin and not referer:
-        # No browser-supplied origin and no auth header → likely cross-origin tool
+    host_hdr = (handler.headers.get("Host", "") or "").strip().lower()
+    if not host_hdr:
         return False
-    expected = "://" + host_hdr
-    if origin and expected in origin: return True
-    if referer and expected in referer: return True
+
+    def netloc_of(u):
+        try:
+            return (urllib.parse.urlparse(u).netloc or "").lower()
+        except Exception:
+            return ""
+
+    origin = (handler.headers.get("Origin", "") or "").strip()
+    referer = (handler.headers.get("Referer", "") or "").strip()
+    if origin and origin.lower() != "null":
+        return netloc_of(origin) == host_hdr
+    if referer:
+        return netloc_of(referer) == host_hdr
     return False
+
+
+# ───── Request-size cap + login throttle ────────────────────────────────────
+MAX_BODY_BYTES = 16 * 1024 * 1024   # hard cap on any JSON request body (anti-OOM)
+
+_LOGIN_ATTEMPTS = {}                 # client_ip -> [timestamps]
+_LOGIN_LOCK = threading.Lock()
+_LOGIN_WINDOW = 300                  # seconds
+_LOGIN_MAX = 10                      # failed-or-not attempts per window per IP
+
+
+def _login_throttled(ip):
+    """True if this IP has exceeded the login attempt budget in the window."""
+    now = time.time()
+    with _LOGIN_LOCK:
+        bucket = _LOGIN_ATTEMPTS.setdefault(ip, [])
+        bucket[:] = [t for t in bucket if t > now - _LOGIN_WINDOW]
+        if len(bucket) >= _LOGIN_MAX:
+            return True
+        bucket.append(now)
+        return False
 
 # ───── Pre-built agents (seeded on first run) ───────────────────────────────
 DEFAULT_AGENTS = [
@@ -1647,11 +1734,20 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _read_body(self):
-        cl = int(self.headers.get("Content-Length", 0))
-        if cl <= 0: return {}
-        raw = self.rfile.read(cl).decode("utf-8")
-        try: return json.loads(raw)
-        except Exception: return {}
+        try:
+            cl = int(self.headers.get("Content-Length", 0) or 0)
+        except (TypeError, ValueError):
+            return {}
+        if cl <= 0:
+            return {}
+        # Never allocate more than the cap, even if Content-Length lies big.
+        raw = self.rfile.read(min(cl, MAX_BODY_BYTES)).decode("utf-8", "replace")
+        if cl > MAX_BODY_BYTES:
+            return {}   # oversized → treat as empty; downstream returns 400
+        try:
+            return json.loads(raw)
+        except Exception:
+            return {}
 
     def _get_session_user(self):
         # Cookie
@@ -1779,8 +1875,14 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/"):
             return self._handle_api_get(path)
 
-        # Proxy
-        if path.startswith("/v1/") or path in ("/health", "/props", "/slots", "/metrics", "/completion"):
+        # llama.cpp introspection endpoints leak engine internals — /slots in
+        # particular exposes other users' in-flight prompts/completions on the
+        # shared single-process engine. Restrict to admins.
+        if path in ("/slots", "/metrics", "/props"):
+            if not self._require_user("admin"): return
+            return proxy(self, self.path)
+        # Proxy (chat-facing): any authenticated user
+        if path.startswith("/v1/") or path in ("/health", "/completion"):
             if self._get_session_user() is None:
                 return self._send_json(401, {"error": "auth_required"})
             return proxy(self, self.path)
@@ -1872,6 +1974,12 @@ class Handler(BaseHTTPRequestHandler):
     # ---- POST ----
     def do_POST(self):
         path = self.path.split("?", 1)[0]
+        # ── Centralized CSRF gate ──────────────────────────────────────────
+        # Every mutating POST must be same-origin (or Bearer-authed). This
+        # closes the gaps where individual endpoints (/api/users, /api/login,
+        # /api/config, /api/profile, /api/mcp/*) forgot to call _csrf_ok.
+        if not _csrf_ok(self):
+            return self._send_json(403, {"error": "csrf_blocked"})
         # Auth endpoints
         if path == "/api/auth/setup":
             return self._auth_setup()
@@ -2140,6 +2248,8 @@ class Handler(BaseHTTPRequestHandler):
     # ---- DELETE ----
     def do_DELETE(self):
         path = self.path.split("?", 1)[0]
+        if not _csrf_ok(self):
+            return self._send_json(403, {"error": "csrf_blocked"})
         if path.startswith("/api/users/"):
             if not self._require_user("admin"): return
             uid = int(path.rsplit("/", 1)[1])
@@ -2183,6 +2293,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PUT(self):
         path = self.path.split("?", 1)[0]
+        if not _csrf_ok(self):
+            return self._send_json(403, {"error": "csrf_blocked"})
         if path.startswith("/api/agents/"):
             u = self._require_user()
             if not u: return
@@ -2262,11 +2374,20 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _auth_login(self):
+        ip = self.client_address[0] if self.client_address else "?"
+        if _login_throttled(ip):
+            return self._send_json(429, {"error": "too_many_attempts",
+                                         "hint": "Wait a few minutes before trying again."})
         d = self._read_body()
         username = (d.get("username") or "").strip()
         password = d.get("password") or ""
         u = get_user(username=username)
-        if not u or not verify_password(password, u["salt"], u["password_hash"]):
+        # Always run a password hash so a missing user takes the same time as a
+        # wrong password — closes the username-enumeration timing oracle.
+        if not u:
+            hash_password(password)   # burn equivalent PBKDF2 time, discard
+            return self._send_json(401, {"error": "bad_credentials"})
+        if not verify_password(password, u["salt"], u["password_hash"]):
             return self._send_json(401, {"error": "bad_credentials"})
         with DB_LOCK, db() as c:
             c.execute("UPDATE users SET last_login=? WHERE id=?", (int(time.time()), u["id"]))

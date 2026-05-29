@@ -49,8 +49,16 @@ EXTRA_ARGS=""
 EOF
 fi
 
-chmod 644 "${CONFIG_FILE}"
+chmod 600 "${CONFIG_FILE}" 2>/dev/null || true
 chmod +x "${INSTALL_DIR}/bin/llama-server" "${INSTALL_DIR}/bin/llama-main" "${INSTALL_DIR}/bin/control_daemon.py" 2>/dev/null || true
 chown -R ${SYNOPKG_PKGNAME}:${SYNOPKG_PKGNAME} "${INSTALL_DIR}/var" "${INSTALL_DIR}/models" "${ETC_DIR}" 2>/dev/null || true
+
+# Tighten secrets: etc/ holds users.db, secret.key, providers.json, mcp DBs.
+# Must not be readable by other DSM users / co-resident packages.
+chmod 700 "${ETC_DIR}" 2>/dev/null || true
+for f in users.db users.db-wal users.db-shm secret.key providers.json \
+         mcp.db mcp.db-wal mcp.db-shm mcp_memory.db mcp_memory.db-wal mcp_memory.db-shm; do
+    [ -e "${ETC_DIR}/${f}" ] && chmod 600 "${ETC_DIR}/${f}" 2>/dev/null || true
+done
 
 exit 0

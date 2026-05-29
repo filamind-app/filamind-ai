@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import ast
 import datetime as dt
+import ipaddress
 import json
 import os
 import socket
@@ -31,7 +32,32 @@ import subprocess
 import urllib.parse
 import urllib.request
 
-from mcp_runtime import Tool, ToolServer
+from mcp_runtime import Tool, ToolServer, current_user_id
+
+
+def _host_resolves_to_blocked_ip(host: str, port: int = 443) -> bool:
+    """True if `host` resolves to any non-public address. Catches decimal/hex/
+    octal/IPv6-literal encodings (getaddrinfo normalises them) and IPv4-mapped
+    IPv6. Fails CLOSED on resolution error."""
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except Exception:
+        return True
+    _cgnat = ipaddress.ip_network("100.64.0.0/10")
+    for info in infos:
+        ip_str = info[4][0].split("%", 1)[0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            return True
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+            ip = ip.ipv4_mapped
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+            return True
+        if ip.version == 4 and ip in _cgnat:
+            return True
+    return False
 
 
 # Config paths
@@ -230,6 +256,13 @@ class MemoryServer(ToolServer):
             handler=self._delete,
         ))
 
+    # Anonymous/system callers (user_id is None) share this sentinel namespace.
+    _ANON = 0
+
+    def _uid(self) -> int:
+        u = current_user_id()
+        return int(u) if u is not None else self._ANON
+
     def _ensure_db(self):
         # Allow override via the env var so unit tests don't need /var/packages/.
         global MEMORY_DB
@@ -244,11 +277,37 @@ class MemoryServer(ToolServer):
         with sqlite3.connect(MEMORY_DB, timeout=10) as c:
             c.execute("""
                 CREATE TABLE IF NOT EXISTS memory_kv (
-                    key   TEXT PRIMARY KEY,
-                    value TEXT NOT NULL,
-                    ts    INTEGER NOT NULL
+                    user_id INTEGER NOT NULL DEFAULT 0,
+                    key     TEXT NOT NULL,
+                    value   TEXT NOT NULL,
+                    ts      INTEGER NOT NULL,
+                    PRIMARY KEY (user_id, key)
                 )
             """)
+            # Migrate a pre-v1.3.2 single-namespace table (no user_id column),
+            # parking any legacy rows under the anonymous namespace so nobody's
+            # notes vanish — but they're no longer globally visible by default.
+            cols = [r[1] for r in c.execute("PRAGMA table_info(memory_kv)").fetchall()]
+            if "user_id" not in cols:
+                c.execute("ALTER TABLE memory_kv RENAME TO memory_kv_legacy")
+                c.execute("""
+                    CREATE TABLE memory_kv (
+                        user_id INTEGER NOT NULL DEFAULT 0,
+                        key     TEXT NOT NULL,
+                        value   TEXT NOT NULL,
+                        ts      INTEGER NOT NULL,
+                        PRIMARY KEY (user_id, key)
+                    )
+                """)
+                c.execute("INSERT OR IGNORE INTO memory_kv (user_id, key, value, ts) "
+                          "SELECT 0, key, value, ts FROM memory_kv_legacy")
+                c.execute("DROP TABLE memory_kv_legacy")
+        # User-scoped notes — keep the file private.
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.chmod(MEMORY_DB + suffix, 0o600)
+            except Exception:
+                pass
 
     def _set(self, args):
         key = str(args.get("key", "")).strip()
@@ -260,29 +319,32 @@ class MemoryServer(ToolServer):
         import time
         with sqlite3.connect(MEMORY_DB) as c:
             c.execute(
-                "INSERT INTO memory_kv (key, value, ts) VALUES (?, ?, ?) "
-                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, ts=excluded.ts",
-                (key, val, int(time.time())),
+                "INSERT INTO memory_kv (user_id, key, value, ts) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(user_id, key) DO UPDATE SET value=excluded.value, ts=excluded.ts",
+                (self._uid(), key, val, int(time.time())),
             )
         return {"ok": True, "key": key}
 
     def _get(self, args):
         key = str(args.get("key", "")).strip()
         with sqlite3.connect(MEMORY_DB) as c:
-            r = c.execute("SELECT value, ts FROM memory_kv WHERE key=?", (key,)).fetchone()
+            r = c.execute("SELECT value, ts FROM memory_kv WHERE user_id=? AND key=?",
+                          (self._uid(), key)).fetchone()
         if not r:
             return {"key": key, "value": None}
         return {"key": key, "value": r[0], "stored_at": r[1]}
 
     def _list(self, _args):
         with sqlite3.connect(MEMORY_DB) as c:
-            rows = c.execute("SELECT key, ts FROM memory_kv ORDER BY ts DESC").fetchall()
+            rows = c.execute("SELECT key, ts FROM memory_kv WHERE user_id=? ORDER BY ts DESC",
+                             (self._uid(),)).fetchall()
         return {"count": len(rows), "keys": [{"key": k, "stored_at": t} for k, t in rows]}
 
     def _delete(self, args):
         key = str(args.get("key", "")).strip()
         with sqlite3.connect(MEMORY_DB) as c:
-            cur = c.execute("DELETE FROM memory_kv WHERE key=?", (key,))
+            cur = c.execute("DELETE FROM memory_kv WHERE user_id=? AND key=?",
+                            (self._uid(), key))
             removed = cur.rowcount
         return {"key": key, "removed": removed}
 
@@ -472,19 +534,11 @@ class FetchServer(ToolServer):
         host = (parsed.hostname or "").lower()
         if not any(host == h or host.endswith("." + h) for h in self.allow_hosts):
             raise PermissionError(f"host not allow-listed: {host}")
-        # RFC1918 block: resolve hostname and ensure it isn't private (defeats DNS rebinding)
-        try:
-            ips = socket.getaddrinfo(host, parsed.port or 443, proto=socket.IPPROTO_TCP)
-            for fam, _, _, _, sockaddr in ips:
-                ip = sockaddr[0]
-                if ip.startswith(("10.", "127.", "192.168.")):
-                    raise PermissionError(f"resolves to private IP: {ip}")
-                if ip.startswith("172."):
-                    o2 = int(ip.split(".")[1])
-                    if 16 <= o2 <= 31:
-                        raise PermissionError(f"resolves to private IP: {ip}")
-        except socket.gaierror:
-            raise ValueError(f"could not resolve host: {host}")
+        # SSRF defence: resolve and reject private / loopback / link-local /
+        # CGNAT / IPv6-ULA, incl. decimal/hex/IPv6-literal encodings. (169.254.x
+        # cloud-metadata and ::1 were missed by the old string check.)
+        if _host_resolves_to_blocked_ip(host, parsed.port or 443):
+            raise PermissionError(f"host resolves to a blocked/non-public address: {host}")
 
         req = urllib.request.Request(url, headers={
             "User-Agent": "FilamindAI-MCP/1.0",

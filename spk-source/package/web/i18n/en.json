@@ -16,27 +16,40 @@
         "your_nas": "your NAS"
     },
     "errors": {
-        "model_load_failed": "Model failed to load",
-        "pick_smaller_model": "Choose a smaller model",
-        "try_cloud_hint": "Or open Settings → Providers and use Claude / ChatGPT / Gemini instead.",
-        "export_failed": "Export failed: ",
-        "switch_failed": "Could not switch model: "
+        "generic": "Something went wrong.",
+        "http_error": "HTTP {status}: {body}",
+        "network": "Network error",
+        "timeout": "Request timed out.",
+        "auth_required": "Sign-in required.",
+        "forbidden": "You don't have permission.",
+        "not_found": "Not found.",
+        "save_failed": "Save failed",
+        "load_failed": "Load failed"
     },
     "actions": {
-        "edit": "Edit",
         "save": "Save",
         "cancel": "Cancel",
-        "save_resend": "Save & resend",
-        "search_conversations": "Search conversations…",
-        "no_matches": "No matches",
-        "no_conversation": "No active conversation.",
-        "export_conversation": "Export conversation",
-        "voice_input": "Voice input"
+        "delete": "Delete",
+        "create": "Create",
+        "edit": "Edit",
+        "close": "Close",
+        "copy": "Copy",
+        "copied": "Copied",
+        "refresh": "Refresh",
+        "retry": "Retry",
+        "confirm": "Confirm",
+        "back": "Back",
+        "next": "Next",
+        "ok": "OK"
     },
     "confirms": {
-        "export_format": "Export as 'md' (markdown) or 'json'?",
+        "delete_user": "Delete user {username}? This cannot be undone.",
+        "delete_agent": "Delete this agent?",
         "revoke_key": "Revoke this key?",
-        "delete_agent": "Delete this agent?"
+        "switch_model": "Switch to model:\n{path}\n\nResource settings (context size, GPU layers) will be auto-adjusted for the model size. The engine will restart and the chat will be briefly offline.",
+        "safe_defaults": "Auto-tune memory settings for the currently loaded model and restart the engine?",
+        "force_restart": "Kill the inference engine and start it fresh? In-flight requests will be lost.",
+        "unsaved_changes": "You have unsaved changes. Discard them?"
     },
     "toolbar": {
         "agent": "Agent",
@@ -61,41 +74,22 @@
         "summary_template": "📋 Template: summarize"
     },
     "providers": {
-        "get_key": "Get API key",
-        "how_to": "How to get a key",
-        "key_format": "Key format",
-        "pricing": "Pricing",
-        "console": "Console",
+        "title": "Cloud AI providers",
+        "intro": "Configure API keys to use external models (Claude, ChatGPT, Gemini) from the same chat interface. The active provider is picked from the dropdown next to the chat mode at the top.",
+        "save": "Save providers",
         "enable": "Enable",
         "api_key": "API key",
+        "api_key_set": "(set — leave empty to keep)",
+        "api_key_placeholder": "Paste your API key",
         "default_model": "Default model",
-        "refresh_from_api": "Refresh from API",
-        "models_cached": "models cached. Click Refresh after saving the key to fetch the live list.",
-        "key_set_keep": "(set — leave empty to keep)",
-        "paste_key": "Paste your API key",
-        "base_url": "Base URL",
-        "base_url_hint": "Only change this for self-hosted gateways or proxies (e.g. LiteLLM, OpenRouter).",
-        "openai": {
-            "step1": "Sign in or create an OpenAI account.",
-            "step2": "Add a payment method under Billing (required — no free tier on API).",
-            "step3": "Open API keys → 'Create new secret key' → name it 'Filamind AI' → Copy.",
-            "step4": "Paste below, pick a default model (e.g. gpt-4o-mini for cheap, gpt-4o for quality).",
-            "pricing": "gpt-4o-mini: $0.15 / 1M input · $0.60 / 1M output. gpt-4o: $2.50 / $10."
-        },
-        "anthropic": {
-            "step1": "Sign in or create an Anthropic Console account.",
-            "step2": "Add credit ($5 minimum) under Billing — no free tier as of 2025.",
-            "step3": "Settings → API keys → 'Create Key' → name it → Copy. Starts with sk-ant-api03-",
-            "step4": "Paste below. claude-3-5-haiku-20241022 is the cheapest; claude-sonnet-4-5 is the best quality.",
-            "pricing": "Claude 3.5 Haiku: $0.80 / 1M input · $4 / 1M output. Sonnet: $3 / $15. Opus: $15 / $75."
-        },
-        "gemini": {
-            "step1": "Sign in with a Google account at Google AI Studio.",
-            "step2": "Open the link below → 'Create API key' → 'Create API key in new project'.",
-            "step3": "Copy the key (starts with AIzaSy). It works on the FREE tier — no billing required to start.",
-            "step4": "Paste below. Default: gemini-2.5-flash (good balance). gemini-2.5-flash-lite has the highest free quota.",
-            "pricing": "FREE tier available: gemini-2.5-flash gives ~10 RPM and ~250 RPD. Paid: gemini-2.5-flash $0.10 / $0.40 per 1M."
-        }
+        "local": "Local (GPU)",
+        "openai": "ChatGPT",
+        "anthropic": "Claude",
+        "gemini": "Gemini",
+        "label": "Provider",
+        "help_openai": "Get a key from <code>platform.openai.com/api-keys</code>.",
+        "help_anthropic": "Get a key from <code>console.anthropic.com/settings/keys</code>.",
+        "help_gemini": "Get a key from <code>aistudio.google.com/apikey</code>."
     },
     "mcp": {
         "title": "Model Context Protocol (MCP)",
@@ -123,7 +117,9 @@
         "audit_tool": "Tool",
         "audit_dur": "ms",
         "audit_result": "Result",
-        "next_title": "Coming in v1.3.1"
+        "next_title": "On the roadmap",
+        "manual_note": "⚠ Current state: tools run <b>manually</b> from this panel (pick a tool → Run). The assistant does <b>not yet auto-call tools during chat</b> — that is the next milestone. The runtime + 8 servers below are fully functional when invoked here.",
+        "roadmap": "In-chat tool-calling (model invokes tools automatically), plus Tier-B cloud integrations: web search (Brave/Tavily), GitHub, Home Assistant, Synology FileStation, Surveillance Station — those will need per-user API keys."
     },
     "about": {
         "tab": "About",
@@ -140,7 +136,7 @@
         "check_failed": "Update check failed",
         "up_to_date": "You're on the latest version",
         "no_release": "No releases published yet.",
-        "dsm_hint": "For one-click updates from DSM Package Center, add the Filamind AI source URL under Package Center → Settings → Package Sources → Add → <code>https://filamind-app.github.io/filamind-ai/</code>",
+        "dsm_hint": "Updates today: use this button, or download the SPK from the Releases page and install via Package Center → Manual Install. (One-click DSM Package Source updates are planned but need a dynamic backend — GitHub Pages can't answer DSM's requests yet.)",
         "changelog": "Release history",
         "links": "Useful links",
         "source_code": "📦 Source code",
@@ -160,8 +156,13 @@
         "row_maintainer": "Maintainer"
     },
     "connection": {
-        "use_streaming": "Streaming responses (experimental)",
-        "use_streaming_hint": "When enabled, the assistant's reply appears word-by-word. Disabled by default because llama.cpp b1620 returns HTTP 500 on some streaming combinations; non-streaming is reliable."
+        "server_url": "Server URL",
+        "server_url_placeholder": "auto (same origin)",
+        "server_url_hint": "Leave empty when opening the chat from the DSM icon. Set to <code>http://NAS-IP:8181</code> when accessing from another device.",
+        "poll_interval": "Status polling interval (seconds)",
+        "poll_interval_hint": "How often to ping the server. Higher = less network noise.",
+        "streaming": "Streaming responses (experimental)",
+        "streaming_hint": "When enabled, the assistant's reply appears word-by-word. Disabled by default because llama.cpp b1620 returns HTTP 500 on some streaming combinations; non-streaming is reliable."
     },
     "setup": {
         "title": "Create the first admin account",
@@ -366,24 +367,6 @@
         "url_required": "Paste a URL first.",
         "control_api_unreachable": "Could not reach control API: {error}. Open the chat URL from DSM (icon) for full functionality."
     },
-    "providers": {
-        "title": "Cloud AI providers",
-        "intro": "Configure API keys to use external models (Claude, ChatGPT, Gemini) from the same chat interface. The active provider is picked from the dropdown next to the chat mode at the top.",
-        "save": "Save providers",
-        "enable": "Enable",
-        "api_key": "API key",
-        "api_key_set": "(set — leave empty to keep)",
-        "api_key_placeholder": "Paste your API key",
-        "default_model": "Default model",
-        "local": "Local (GPU)",
-        "openai": "ChatGPT",
-        "anthropic": "Claude",
-        "gemini": "Gemini",
-        "label": "Provider",
-        "help_openai": "Get a key from <code>platform.openai.com/api-keys</code>.",
-        "help_anthropic": "Get a key from <code>console.anthropic.com/settings/keys</code>.",
-        "help_gemini": "Get a key from <code>aistudio.google.com/apikey</code>."
-    },
     "system": {
         "live_info": "Live system info",
         "loading": "Loading…",
@@ -406,15 +389,6 @@
         "utilization": "Utilization",
         "temperature": "Temp",
         "force_restart_confirm": "Kill the inference engine and start it fresh? In-flight requests will be lost."
-    },
-    "connection": {
-        "server_url": "Server URL",
-        "server_url_placeholder": "auto (same origin)",
-        "server_url_hint": "Leave empty when opening the chat from the DSM icon. Set to <code>http://NAS-IP:8181</code> when accessing from another device.",
-        "poll_interval": "Status polling interval (seconds)",
-        "poll_interval_hint": "How often to ping the server. Higher = less network noise.",
-        "streaming": "Streaming responses (experimental)",
-        "streaming_hint": "When enabled, the assistant's reply appears word-by-word. Disabled by default because llama.cpp b1620 returns HTTP 500 on some streaming combinations; non-streaming is reliable."
     },
     "agents": {
         "title": "Agents (chat personas)",
@@ -576,33 +550,6 @@
         "snippet_python_ready": "Ready-to-paste Python (key embedded)",
         "compatible_tools": "Compatible tools:"
     },
-    "errors": {
-        "generic": "Something went wrong.",
-        "http_error": "HTTP {status}: {body}",
-        "network": "Network error",
-        "timeout": "Request timed out.",
-        "auth_required": "Sign-in required.",
-        "forbidden": "You don't have permission.",
-        "not_found": "Not found.",
-        "save_failed": "Save failed",
-        "load_failed": "Load failed"
-    },
-    "actions": {
-        "save": "Save",
-        "cancel": "Cancel",
-        "delete": "Delete",
-        "create": "Create",
-        "edit": "Edit",
-        "close": "Close",
-        "copy": "Copy",
-        "copied": "Copied",
-        "refresh": "Refresh",
-        "retry": "Retry",
-        "confirm": "Confirm",
-        "back": "Back",
-        "next": "Next",
-        "ok": "OK"
-    },
     "placeholders": {
         "search": "Search…",
         "username": "Username",
@@ -614,14 +561,5 @@
         "agent_id": "my_helper",
         "agent_name": "My Helper",
         "agent_description": "What does this agent do?"
-    },
-    "confirms": {
-        "delete_user": "Delete user {username}? This cannot be undone.",
-        "delete_agent": "Delete this agent?",
-        "revoke_key": "Revoke this key?",
-        "switch_model": "Switch to model:\n{path}\n\nResource settings (context size, GPU layers) will be auto-adjusted for the model size. The engine will restart and the chat will be briefly offline.",
-        "safe_defaults": "Auto-tune memory settings for the currently loaded model and restart the engine?",
-        "force_restart": "Kill the inference engine and start it fresh? In-flight requests will be lost.",
-        "unsaved_changes": "You have unsaved changes. Discard them?"
     }
 }

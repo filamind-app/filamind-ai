@@ -5,15 +5,48 @@
 > **ملاحظة:** صدر المشروع باسم *SaynologyAI* حتى الإصدار v1.2.2. من v1.2.4 فصاعداً اسمه **Filamind AI**. لم أُعدّل المداخل التاريخية أدناه — تعكس الاسم الذي شُحن به الإصدار فعلاً.
 
 Local LLM chat for Synology NAS. Two reference devices:
-- **DVA 3221** (Intel Atom C3538, NVIDIA GTX 1650 4 GB, 64 GB RAM, DSM 7.2.1, CUDA 10.1) — GPU build on branch `device/dva3221`.
-- **DS1821+** (AMD Ryzen V1500B with AVX2, 62 GB RAM, no GPU) — CPU build on branch `device/ds1821-plus`.
+- **DVA 3221** (Intel Atom C3538, NVIDIA GTX 1650 4 GB, 64 GB RAM, DSM 7.2.1, CUDA 10.1) — GPU build on branch `device/dva3221`. **✅ Fully functional** (verified ~80 tok/s on TinyLlama, GPU-offloaded).
+- **DS1821+** (AMD Ryzen V1500B with AVX2, 62 GB RAM, no GPU) — CPU build on branch `device/ds1821-plus`. **⚠️ NOT yet functional** — the SPK installs and the daemon runs, but the `llama-server` binary is currently a build-stub placeholder. A real AVX2 binary still needs to be compiled via `build_llama_cpu_avx2.sh` and committed. Until then this device cannot run inference. See `spk-source/DEVICE.md` on that branch.
 
-تطبيق محادثة ذكاء اصطناعي محلي لـ Synology NAS.
+تطبيق محادثة ذكاء اصطناعي محلي لـ Synology NAS. **DVA 3221 يعمل بالكامل؛ DS1821+ لم يُفعَّل بعد** (الـ binary حالياً placeholder — يلزم بناء نسخة AVX2 حقيقية).
 
 **Maintainer · المطوّر:** Abdelmonem Awad — eg2@live.com
 **Repository · الريبو:** https://github.com/filamind-app/filamind-ai
 
 Following [Keep a Changelog](https://keepachangelog.com/) — تصنيفات: **Added · Changed · Fixed · Security · Removed · Deprecated**.
+
+---
+
+## [1.3.2] — 2026-05-27
+
+تحصين أمني + إصلاحات واجهة + تصحيح الادعاءات لتطابق الواقع · Security hardening + UI fixes + honesty pass (claims corrected to match reality).
+
+This release is the result of a candid 6-perspective internal audit. It fixes real security holes, a visible CSS regression, and corrects three places where earlier changelogs/docs overstated what the code does.
+
+### Security
+- **CSRF: closed the bypass + the coverage gaps.** The old check used a substring match (`"://" + host in referer`), which a URL like `https://evil/x?=://nas-host` could satisfy. Replaced with strict `urlparse().netloc` host:port equality. **Also added a centralized CSRF gate** at the top of every mutating verb (`do_POST`/`do_PUT`/`do_DELETE`) — previously `/api/users`, `/api/auth/login`, `/api/auth/setup`, `/api/config`, `/api/profile`, `/api/providers`, `/api/mcp/*` had **no** CSRF protection, allowing a malicious page the admin opened to silently create a rogue admin account. Bearer-authed API clients remain exempt (no cookie → no CSRF surface).
+- **SSRF: defeated IP-literal encodings + redirect bypass.** The model downloader and the `fetch.get` MCP tool both used naive string checks (`host.startswith("10.")`) that missed `169.254.169.254` (cloud metadata), all of IPv6, and decimal/hex IP encodings (`http://2130706433/` = 127.0.0.1). Both now resolve via `getaddrinfo` and reject any private/loopback/link-local/CGNAT/reserved/IPv4-mapped address using the `ipaddress` module. The downloader additionally **re-validates every HTTP redirect target** (a public URL can no longer 302 into your LAN). Verified with a test matrix (decimal-IP, hex, metadata, file:// all blocked; github.com/huggingface.co allowed).
+- **Database file permissions.** `users.db` (password + API-key hashes), `mcp.db` (audit log), and `mcp_memory.db` were created at the process umask (typically world-readable `0644`). Now `chmod 0600` at creation, and the `etc/` directory is `chmod 0700` in `postinst` — so co-resident DSM packages / other local users can't read the hashes.
+- **MCP memory store is now actually per-user.** The `memory.*` tool stored everything in one global namespace (no `user_id` column), so any user could read/overwrite another user's notes. Added a composite `(user_id, key)` primary key; the registry now threads the caller's `user_id` into the handler via a thread-local context. Existing rows migrate into an anonymous namespace.
+- **Stored XSS in the admin Users table.** A non-admin can set their own `display_name`; it was injected into the admin page via `innerHTML` unescaped, so `<img onerror=…>` would run in the admin's browser. Now HTML-escaped. The chat `escapeHtml()` also got a `String()` guard (it threw on non-string fields).
+- **Login brute-force + user-enumeration.** Added a per-IP login throttle (10 attempts / 5 min → `429`) and an equal-time path for unknown usernames (a missing user now runs a dummy PBKDF2 so response timing no longer reveals whether a username exists).
+- **DoS via giant Content-Length.** `_read_body` now caps the read at 16 MB instead of allocating whatever the client claims.
+- **llama.cpp introspection endpoints locked down.** `/slots` (which exposes other users' in-flight prompts on the shared engine), `/metrics`, and `/props` are now **admin-only** instead of any-authenticated-user.
+
+### Fixed
+- **Settings panels rendered completely unstyled.** `index.html` referenced `.card`, `.alert`, `.badge`, `.btn-danger`, `.modal-body` but never defined them (and never loaded `auth-common.css`), so the MCP, About, and Providers cards plus every error/success banner showed as flat unstyled text — directly contradicting the v1.3.1 "modern visual pass". Added the missing component CSS (themed via the existing CSS variables) + a toggle switch and mini-table style for the MCP panel.
+- **Dead / stale UI removed.** Deleted the empty, never-populated `#providerSelect` element from the top bar. Updated the Files/MCP toolbar tooltips (no longer "coming soon" — they open working panels). Replaced the stale "Coming in v1.3.1" MCP card (the app *is* v1.3.x) with an honest "tools are manual-only right now" notice.
+
+### Changed
+- **More of the UI now actually translates.** The Settings tab navigation, modal title, Save/Cancel buttons, and the welcome screen were hardcoded English even though Arabic keys existed. They're now wired to i18n, and the welcome screen's "{agent} mode" suffix uses the translatable `chat.mode_label_suffix` instead of a concatenated English word (which broke RTL).
+
+### Honesty pass (docs corrected to match code)
+- **MCP claim corrected** — the v1.3.0 headline ("lets the assistant call tools mid-conversation") was wrong; tools are manual-only. Corrected in this changelog, the v1.3.0 entry, and the in-app MCP tab.
+- **DS1821+ status corrected** — now clearly marked as *not yet functional* (stub binary) at the top of this changelog and in the README, instead of implying full dual-device support.
+- **DSM Package Source caveat added** — GitHub Pages is static and returns HTTP 405 to the POST requests DSM sends, so the "one-click update source" does not work as shipped; it needs a dynamic backend (e.g. a Cloudflare Worker). This limitation is now disclosed in `docs/index.html` and the in-app hint, instead of being presented as a working feature.
+
+### Security disclosure (transparency)
+- **2026-05-27 — committed credential, remediated same day.** During the initial public-repo bootstrap, a development NAS SSH password was briefly committed in `copy_nas_libs.sh` (~14 minutes public before the repo was made private). Remediation: the repo was deleted and recreated with clean history (the leaked commit SHAs now 404), the script was rewritten to take credentials from environment variables, GitHub secret-scanning + push-protection were enabled, and a local `pre-push` hook was added. **The exposed password must still be treated as compromised and rotated** — a history rewrite cannot recall data that was briefly public. Documented here per Keep-a-Changelog transparency norms.
 
 ---
 
@@ -44,7 +77,11 @@ Following [Keep a Changelog](https://keepachangelog.com/) — تصنيفات: **
 
 ## [1.3.0] — 2026-05-27
 
-**MCP — Model Context Protocol runtime + 8 Tier-A tool servers** · أول إصدار يمنح المساعد القدرة على استدعاء أدوات حقيقية أثناء المحادثة.
+**MCP — Model Context Protocol runtime + 8 Tier-A tool servers (tools are manual-only in this release)** · بنية MCP و8 خوادم أدوات تعمل — لكنها تُستدعى يدوياً من قسم الإعدادات فقط.
+
+> **Honest scope note (added in v1.3.2):** This release shipped the MCP *runtime* and 8 working *tool servers*, but the assistant does **not** automatically call tools during a conversation yet. Tools run only when a human invokes them from **Settings → MCP → Run**. The earlier wording ("lets the assistant call tools mid-conversation") overstated this — see the "Not yet wired" subsection below, which was always accurate. In-chat tool-calling remains the next milestone.
+>
+> **ملاحظة صدق (أُضيفت في v1.3.2):** هذا الإصدار يشحن *بنية* MCP و8 *خوادم أدوات* تعمل فعلاً، لكن المساعد **لا** يستدعي الأدوات تلقائياً أثناء المحادثة بعد. الأدوات تعمل فقط عند تشغيلها يدوياً من Settings → MCP. الصياغة السابقة بالغت في الوصف.
 
 ### Added — MCP Runtime
 - **`package/bin/mcp_runtime.py`** (~300 lines) — in-process MCP-style tool registry with:

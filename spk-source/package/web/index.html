@@ -694,6 +694,80 @@ html[dir="rtl"] .tab {
 @media (max-width: 760px) {
     html[dir="rtl"] .tabs { border-left: 0; border-bottom: 1px solid var(--border); }
 }
+
+/* ═══════ Cards / alerts / badges — used by MCP, About, Providers tabs ═══════
+   These were referenced by the JS (.card, .alert, .badge, .btn-danger,
+   .modal-body) but never defined in this file, so those panels rendered
+   completely unstyled. v1.3.2 fix. */
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow-sm);
+}
+.card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+.card h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.modal-body { padding: 18px 20px; }
+
+.alert {
+    padding: 10px 14px;
+    border-radius: 9px;
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 8px 0;
+    border: 1px solid transparent;
+}
+.alert-error   { background: rgba(201,48,48,.10);  color: var(--danger); border-color: rgba(201,48,48,.22); }
+.alert-ok      { background: rgba(22,163,74,.10);  color: var(--ok);     border-color: rgba(22,163,74,.22); }
+.alert-info    { background: var(--accent-faint);  color: var(--accent); border-color: var(--accent-faint); }
+.alert-warn    { background: rgba(217,119,6,.10);   color: var(--warn);   border-color: rgba(217,119,6,.22); }
+
+.badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em;
+}
+.badge-admin { background: var(--accent-faint); color: var(--accent); }
+.badge-user  { background: var(--bg-elev);      color: var(--text-dim); }
+.badge-on    { background: rgba(22,163,74,.14);  color: var(--ok); }
+.badge-off   { background: var(--bg-elev);       color: var(--text-faint); }
+
+.btn-danger  { color: var(--danger); border-color: var(--danger); background: var(--bg); }
+.btn-danger:hover { background: rgba(201,48,48,.08); }
+.btn-sm {
+    padding: 5px 12px; font-size: 12px; border-radius: 7px;
+    border: 1px solid var(--border-strong); background: var(--bg);
+    color: var(--text); cursor: pointer; font-weight: 500;
+}
+.btn-sm:hover { background: var(--bg-elev); }
+
+/* Simple table used in MCP audit + admin-style listings inside Settings */
+table.mini { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.mini th, table.mini td {
+    padding: 8px 10px; text-align: start;
+    border-bottom: 1px solid var(--border);
+}
+table.mini th { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+html[dir="rtl"] table.mini th, html[dir="rtl"] table.mini td { text-align: start; }
+
+/* Toggle switch for MCP server enable/disable */
+.switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .slider {
+    position: absolute; inset: 0; cursor: pointer;
+    background: var(--border-strong); border-radius: 999px; transition: .2s;
+}
+.switch .slider::before {
+    content: ""; position: absolute; height: 16px; width: 16px;
+    left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s;
+}
+.switch input:checked + .slider { background: var(--accent); }
+.switch input:checked + .slider::before { transform: translateX(18px); }
+
 .btn {
     padding: 8px 16px;
     border-radius: 8px;
@@ -900,7 +974,6 @@ html[dir="rtl"] .user-menu-dropdown { right: auto; left: 0; }
             <span id="modelName">Checking server…</span>
         </div>
         <div class="mode-pill" id="modePill"><span id="modeIcon">💬</span> <span id="modeName">Chat</span></div>
-        <select class="provider-select" id="providerSelect" title="Provider"></select>
         <div class="spacer"></div>
         <button class="icon-btn" id="btnRegen" data-i18n-title="chat.regenerate" title="Regenerate last response"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button>
         <button class="icon-btn" id="btnExport" data-i18n-title="actions.export_conversation" title="Export conversation"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
@@ -939,8 +1012,8 @@ html[dir="rtl"] .user-menu-dropdown { right: auto; left: 0; }
             </div>
             <div class="ct-spacer"></div>
             <button class="ct-btn" id="btnToolsBottom" data-i18n-title="toolbar.tools_title" title="Tools (insert helpers)">🧰 <span data-i18n="toolbar.tools">Tools</span></button>
-            <button class="ct-btn" id="btnFilesBottom" data-i18n-title="toolbar.files_title" title="Attach file (coming soon)">📁 <span data-i18n="toolbar.files">Files</span></button>
-            <button class="ct-btn" id="btnMcpBottom" data-i18n-title="toolbar.mcp_title" title="MCP servers (coming soon)">🔌 <span data-i18n="toolbar.mcp">MCP</span></button>
+            <button class="ct-btn" id="btnFilesBottom" data-i18n-title="toolbar.files_title" title="Files (opens MCP filesystem tools)">📁 <span data-i18n="toolbar.files">Files</span></button>
+            <button class="ct-btn" id="btnMcpBottom" data-i18n-title="toolbar.mcp_title" title="Open MCP tool servers">🔌 <span data-i18n="toolbar.mcp">MCP</span></button>
         </div>
         <div class="input-card">
             <textarea id="inputBox" rows="1" placeholder="Message Filamind AI..." autofocus></textarea>
@@ -956,18 +1029,18 @@ html[dir="rtl"] .user-menu-dropdown { right: auto; left: 0; }
 <div class="modal-backdrop" id="settingsModal">
     <div class="modal">
         <div class="modal-head">
-            <h2>Settings</h2>
+            <h2 data-i18n="settings.title">Settings</h2>
             <button class="icon-btn" onclick="closeSettings()">✕</button>
         </div>
         <div class="tabs">
-            <button class="tab active" data-tab="general">General</button>
-            <button class="tab" data-tab="sampling">Sampling</button>
-            <button class="tab" data-tab="providers">Providers</button>
-            <button class="tab" data-tab="resources">Resources</button>
-            <button class="tab" data-tab="models">Models</button>
-            <button class="tab" data-tab="system">System</button>
-            <button class="tab" data-tab="modes">Agents</button>
-            <button class="tab" data-tab="connection">Connection</button>
+            <button class="tab active" data-tab="general" data-i18n="settings.general">General</button>
+            <button class="tab" data-tab="sampling" data-i18n="settings.sampling">Sampling</button>
+            <button class="tab" data-tab="providers" data-i18n="settings.providers">Providers</button>
+            <button class="tab" data-tab="resources" data-i18n="settings.resources">Resources</button>
+            <button class="tab" data-tab="models" data-i18n="settings.models">Models</button>
+            <button class="tab" data-tab="system" data-i18n="settings.system">System</button>
+            <button class="tab" data-tab="modes" data-i18n="settings.modes">Agents</button>
+            <button class="tab" data-tab="connection" data-i18n="settings.connection">Connection</button>
             <button class="tab" data-tab="mcp">MCP</button>
             <button class="tab" data-tab="about" data-i18n="about.tab">About</button>
         </div>
@@ -1268,9 +1341,10 @@ html[dir="rtl"] .user-menu-dropdown { right: auto; left: 0; }
                 </div>
             </div>
 
+            <div class="alert alert-info" style="margin-top:14px;" data-i18n="mcp.manual_note">⚠ Current state: tools run <b>manually</b> from this panel (pick a tool → Run). The assistant does <b>not yet auto-call tools during chat</b> — that's the next milestone. The runtime + 8 servers below are fully functional when invoked here.</div>
             <div class="card" style="background:var(--bg-elev); margin-top:14px; font-size:13px;">
-                <h2 style="margin:0 0 6px; font-size:14px;" data-i18n="mcp.next_title">Coming in v1.3.1</h2>
-                <div class="hint">Tier B cloud integrations: web search (Brave/Tavily), GitHub, Home Assistant, Synology FileStation, Surveillance Station — they need per-user API keys you'll paste under Settings → Providers.</div>
+                <h3 style="margin:0 0 6px; font-size:14px;" data-i18n="mcp.next_title">On the roadmap</h3>
+                <div class="hint" data-i18n="mcp.roadmap">In-chat tool-calling (model invokes tools automatically), plus Tier-B cloud integrations: web search (Brave/Tavily), GitHub, Home Assistant, Synology FileStation, Surveillance Station — those will need per-user API keys.</div>
                 <div class="hint" style="margin-top: 6px;" data-i18n="mcp.spec_link">Spec: <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">modelcontextprotocol.io</a></div>
             </div>
         </div>
@@ -1343,8 +1417,8 @@ html[dir="rtl"] .user-menu-dropdown { right: auto; left: 0; }
         </div>
 
         <div class="modal-foot">
-            <button class="btn" onclick="closeSettings()">Cancel</button>
-            <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+            <button class="btn" onclick="closeSettings()" data-i18n="settings.cancel">Cancel</button>
+            <button class="btn btn-primary" onclick="saveSettings()" data-i18n="settings.save">Save</button>
         </div>
     </div>
 </div>
@@ -1505,7 +1579,7 @@ function serverURL() {
 
 // ============ Markdown ============
 function escapeHtml(s) {
-    return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 function renderMarkdown(text) {
     let out = "";
@@ -1669,10 +1743,12 @@ function renderMessages() {
         const sugs = (m.suggestions || []).map(s =>
             `<button class="suggestion" onclick="useSuggestion(this)">${escapeHtml(s)}</button>`
         ).join("");
+        const tt = (k, fb) => (window.tStr && window.tStr(k)) || fb;
+        const modeSuffix = tt("chat.mode_label_suffix", "mode");
         els.messagesInner.innerHTML = `<div class="welcome">
-            <span class="mode-label">${m.icon} ${m.name} mode</span>
-            <h1>How can I help you today?</h1>
-            <p>Local model on your NAS GPU. Conversations stay in your browser.</p>
+            <span class="mode-label">${escapeHtml(m.icon)} ${escapeHtml(m.name)} ${escapeHtml(modeSuffix)}</span>
+            <h1>${escapeHtml(tt("chat.welcome_title", "How can I help you today?"))}</h1>
+            <p>${escapeHtml(tt("chat.welcome_sub", "Local model on your NAS. Conversations stay in your browser."))}</p>
             <div class="suggestions">${sugs}</div>
         </div>`;
         return;
