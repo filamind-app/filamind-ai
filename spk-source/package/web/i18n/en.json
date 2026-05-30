@@ -63,7 +63,9 @@
         "files_title": "Attach a file (coming in v1.3)",
         "mcp_title": "Connect MCP servers (coming in v1.3)",
         "files_soon": "File attachments are coming in v1.3 (RAG per agent — upload PDFs / TXT / MD). For now, paste text directly into the message.",
-        "mcp_soon": "MCP integration is on the roadmap for v1.3. It will let agents call external tools and APIs via the standard Model Context Protocol."
+        "mcp_soon": "MCP integration is on the roadmap for v1.3. It will let agents call external tools and APIs via the standard Model Context Protocol.",
+        "use_tools": "Use tools",
+        "use_tools_title": "Let the assistant call MCP tools during this chat (experimental)"
     },
     "tools": {
         "insert_date": "📅 Insert today's date",
@@ -118,7 +120,7 @@
         "audit_dur": "ms",
         "audit_result": "Result",
         "next_title": "On the roadmap",
-        "manual_note": "⚠ Current state: tools run <b>manually</b> from this panel (pick a tool → Run). The assistant does <b>not yet auto-call tools during chat</b> — that is the next milestone. The runtime + 8 servers below are fully functional when invoked here.",
+        "manual_note": "✅ In-chat tool-calling is now live (v1.4.0): turn on \"🔧 Use tools\" below the chat box and the assistant will call these tools automatically when helpful. You can also run any tool manually here to test it.",
         "roadmap": "In-chat tool-calling (model invokes tools automatically), plus Tier-B cloud integrations: web search (Brave/Tavily), GitHub, Home Assistant, Synology FileStation, Surveillance Station — those will need per-user API keys."
     },
     "about": {

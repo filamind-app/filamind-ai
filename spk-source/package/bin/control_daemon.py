@@ -325,9 +325,17 @@ def db_init():
             created_by INTEGER,
             created_at INTEGER,
             updated_at INTEGER,
+            tools TEXT,
             FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
         );
         """)
+        # Migration for installs created before the agents.tools column existed.
+        try:
+            cols = [r[1] for r in c.execute("PRAGMA table_info(agents)").fetchall()]
+            if "tools" not in cols:
+                c.execute("ALTER TABLE agents ADD COLUMN tools TEXT")
+        except Exception:
+            pass
         # Seed default agents (only insert if missing — don't overwrite user edits)
         now = int(time.time())
         for a in DEFAULT_AGENTS:
@@ -356,8 +364,15 @@ def agent_to_dict(row):
         "max_tokens": row["max_tokens"],
         "tags": (row["tags"] or "").split(",") if row["tags"] else [],
         "is_builtin": bool(row["is_builtin"]),
+        "tools": (json.loads(row["tools"]) if _row_has(row, "tools") and row["tools"] else []),
         "created_at": row["created_at"], "updated_at": row["updated_at"],
     }
+
+def _row_has(row, key):
+    try:
+        return key in row.keys()
+    except Exception:
+        return False
 
 def list_agents():
     with db() as c:
@@ -879,7 +894,7 @@ def _sanitize_v1_body(raw: bytes) -> bytes:
     return json.dumps(out, ensure_ascii=False).encode("utf-8")
 
 
-DAEMON_VERSION = "1.3.2"
+DAEMON_VERSION = "1.4.0"
 REPO_OWNER     = "filamind-app"
 REPO_NAME      = "filamind-ai"
 REPO_URL       = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
@@ -1595,6 +1610,313 @@ def call_gemini(p, model, messages, params, _retry_with=None):
             "completion_tokens": um.get("candidatesTokenCount", 0),
         },
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MCP in-chat tool-calling (v1.4.0)
+# ───────────────────────────────────────────────────────────────────────────
+# Canonical message format throughout the loop is OpenAI's:
+#   {"role": "system"|"user"|"assistant"|"tool",
+#    "content": str|None,
+#    "tool_calls": [{"id", "type":"function", "function":{"name","arguments"(json str)}}],  # assistant only
+#    "tool_call_id": str, "name": str}                                                       # tool role only
+# Each *_turn() converts to its provider's wire shape, sends ONE request, and
+# returns a normalized dict:
+#   {"finish": "stop"|"tool_calls", "text": str,
+#    "tool_calls": [{"id","name","args"}], "model": str, "usage": dict}
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _openai_turn(p, model, messages, params, tools):
+    body = {
+        "model": model,
+        "messages": messages,
+        "temperature": float(params.get("temperature", 0.7)),
+        "max_tokens": int(params.get("max_tokens", 1024)),
+    }
+    if params.get("top_p") is not None:
+        body["top_p"] = float(params["top_p"])
+    if tools:
+        body["tools"] = tools
+        body["tool_choice"] = "auto"
+    data = _http_json(p["base_url"].rstrip("/") + "/chat/completions",
+                      json.dumps(body).encode("utf-8"),
+                      {"Content-Type": "application/json",
+                       "Authorization": f"Bearer {p['api_key']}"})
+    msg = data["choices"][0]["message"]
+    usage = data.get("usage", {})
+    mdl = data.get("model", model)
+    tcs = msg.get("tool_calls") or []
+    if tcs:
+        calls = []
+        for tc in tcs:
+            fn = tc.get("function", {})
+            try:
+                a = json.loads(fn.get("arguments") or "{}")
+            except Exception:
+                a = {}
+            calls.append({"id": tc.get("id", ""), "name": fn.get("name", ""), "args": a})
+        return {"finish": "tool_calls", "text": msg.get("content") or "",
+                "tool_calls": calls, "assistant_msg": {
+                    "role": "assistant", "content": msg.get("content"),
+                    "tool_calls": tcs}, "model": mdl, "usage": usage}
+    return {"finish": "stop", "text": msg.get("content") or "",
+            "tool_calls": [], "model": mdl, "usage": usage}
+
+
+def _anthropic_turn(p, model, messages, params, tools):
+    system = None
+    msgs = []
+    for m in messages:
+        role = m["role"]
+        if role == "system":
+            system = (system + "\n\n" + m["content"]) if system else m["content"]
+        elif role == "assistant" and m.get("tool_calls"):
+            blocks = []
+            if m.get("content"):
+                blocks.append({"type": "text", "text": m["content"]})
+            for tc in m["tool_calls"]:
+                fn = tc.get("function", {})
+                try:
+                    inp = json.loads(fn.get("arguments") or "{}")
+                except Exception:
+                    inp = {}
+                blocks.append({"type": "tool_use", "id": tc.get("id", ""),
+                               "name": fn.get("name", ""), "input": inp})
+            msgs.append({"role": "assistant", "content": blocks})
+        elif role == "tool":
+            # Anthropic carries tool results inside a user turn.
+            tr = {"type": "tool_result", "tool_use_id": m.get("tool_call_id", ""),
+                  "content": m.get("content", "")}
+            if msgs and msgs[-1]["role"] == "user" and isinstance(msgs[-1]["content"], list):
+                msgs[-1]["content"].append(tr)
+            else:
+                msgs.append({"role": "user", "content": [tr]})
+        elif role in ("user", "assistant"):
+            msgs.append({"role": role, "content": m["content"]})
+    body = {
+        "model": model,
+        "max_tokens": int(params.get("max_tokens", 1024)),
+        "messages": msgs,
+        "temperature": float(params.get("temperature", 0.7)),
+    }
+    if system:
+        body["system"] = system
+    if params.get("top_p") is not None:
+        body["top_p"] = float(params["top_p"])
+    if tools:
+        body["tools"] = tools
+    data = _http_json(p["base_url"].rstrip("/") + "/messages",
+                      json.dumps(body).encode("utf-8"),
+                      {"Content-Type": "application/json",
+                       "x-api-key": p["api_key"],
+                       "anthropic-version": "2023-06-01"})
+    text = ""
+    calls = []
+    native_blocks = []
+    for block in data.get("content", []):
+        native_blocks.append(block)
+        if block.get("type") == "text":
+            text += block.get("text", "")
+        elif block.get("type") == "tool_use":
+            calls.append({"id": block.get("id", ""), "name": block.get("name", ""),
+                          "args": block.get("input", {}) or {}})
+    um = data.get("usage", {})
+    usage = {"prompt_tokens": um.get("input_tokens", 0),
+             "completion_tokens": um.get("output_tokens", 0)}
+    mdl = data.get("model", model)
+    if data.get("stop_reason") == "tool_use" and calls:
+        # Re-encode the assistant turn in canonical OpenAI shape for history.
+        tool_calls = [{"id": c["id"], "type": "function",
+                       "function": {"name": c["name"],
+                                    "arguments": json.dumps(c["args"])}} for c in calls]
+        return {"finish": "tool_calls", "text": text, "tool_calls": calls,
+                "assistant_msg": {"role": "assistant", "content": text or None,
+                                  "tool_calls": tool_calls},
+                "model": mdl, "usage": usage}
+    return {"finish": "stop", "text": text, "tool_calls": [], "model": mdl, "usage": usage}
+
+
+def _gemini_turn(p, model, messages, params, tools):
+    contents = []
+    system_instruction = None
+    for m in messages:
+        role = m["role"]
+        if role == "system":
+            system_instruction = {"parts": [{"text": m["content"]}]}
+        elif role == "assistant" and m.get("tool_calls"):
+            parts = []
+            if m.get("content"):
+                parts.append({"text": m["content"]})
+            for tc in m["tool_calls"]:
+                fn = tc.get("function", {})
+                try:
+                    a = json.loads(fn.get("arguments") or "{}")
+                except Exception:
+                    a = {}
+                parts.append({"functionCall": {"name": fn.get("name", ""), "args": a}})
+            contents.append({"role": "model", "parts": parts})
+        elif role == "tool":
+            try:
+                resp_obj = json.loads(m.get("content") or "{}")
+            except Exception:
+                resp_obj = {"result": m.get("content", "")}
+            if not isinstance(resp_obj, dict):
+                resp_obj = {"result": resp_obj}
+            contents.append({"role": "user", "parts": [{"functionResponse": {
+                "name": m.get("name", ""), "response": resp_obj}}]})
+        else:
+            grole = "user" if role == "user" else "model"
+            contents.append({"role": grole, "parts": [{"text": m["content"]}]})
+    body = {
+        "contents": contents,
+        "generationConfig": {
+            "temperature": float(params.get("temperature", 0.7)),
+            "maxOutputTokens": int(params.get("max_tokens", 1024)),
+        },
+    }
+    if params.get("top_p") is not None:
+        body["generationConfig"]["topP"] = float(params["top_p"])
+    if system_instruction:
+        body["systemInstruction"] = system_instruction
+    if tools:
+        body["tools"] = [{"function_declarations": tools}]
+    url = f"{p['base_url'].rstrip('/')}/models/{model}:generateContent?key={urllib.parse.quote(p['api_key'])}"
+    data = _http_json(url, json.dumps(body).encode("utf-8"),
+                      {"Content-Type": "application/json"})
+    text = ""
+    calls = []
+    raw_parts = []
+    for cand in data.get("candidates", []):
+        for part in cand.get("content", {}).get("parts", []):
+            raw_parts.append(part)
+            if "text" in part:
+                text += part.get("text", "")
+            elif "functionCall" in part:
+                fc = part["functionCall"]
+                calls.append({"id": "gem_" + fc.get("name", ""), "name": fc.get("name", ""),
+                              "args": fc.get("args", {}) or {}})
+    um = data.get("usageMetadata", {})
+    usage = {"prompt_tokens": um.get("promptTokenCount", 0),
+             "completion_tokens": um.get("candidatesTokenCount", 0)}
+    if calls:
+        tool_calls = [{"id": c["id"], "type": "function",
+                       "function": {"name": c["name"],
+                                    "arguments": json.dumps(c["args"])}} for c in calls]
+        return {"finish": "tool_calls", "text": text, "tool_calls": calls,
+                "assistant_msg": {"role": "assistant", "content": text or None,
+                                  "tool_calls": tool_calls},
+                "model": model, "usage": usage}
+    return {"finish": "stop", "text": text, "tool_calls": [], "model": model, "usage": usage}
+
+
+def _local_turn(p, model, messages, params, tools):
+    """b1620 has no native tool calling, so we emulate it via the prompt: tool
+    schemas are injected into a system addendum and the model is asked to emit a
+    <tool_call>{...}</tool_call> block. Best-effort — local models follow this
+    far less reliably than cloud models, which is surfaced honestly in the UI."""
+    msgs = [dict(m) for m in messages]
+    if tools:
+        spec = json.dumps([{"name": t["function"]["name"],
+                            "description": t["function"]["description"],
+                            "parameters": t["function"]["parameters"]}
+                           for t in tools], ensure_ascii=False)
+        instr = ("\n\nYou can call tools. Available tools (JSON):\n" + spec +
+                 "\n\nTo call a tool, reply with ONLY this exact line and nothing else:\n"
+                 "<tool_call>{\"name\": \"<tool>\", \"arguments\": {...}}</tool_call>\n"
+                 "After you receive a <tool_result>, use it to answer normally.")
+        if msgs and msgs[0]["role"] == "system":
+            msgs[0] = {"role": "system", "content": (msgs[0]["content"] or "") + instr}
+        else:
+            msgs.insert(0, {"role": "system", "content": instr.strip()})
+    body = {
+        "stream": False,
+        "messages": [{"role": m["role"] if m["role"] in ("system", "user", "assistant") else "user",
+                      "content": m.get("content") or (
+                          "<tool_result>" + (m.get("_tool_text") or "") + "</tool_result>"
+                          if m["role"] == "tool" else "")}
+                     for m in msgs],
+        "temperature": float(params.get("temperature", 0.7)),
+        "max_tokens": min(int(params.get("max_tokens", 512)), 1024),
+        "repeat_penalty": 1.25, "repeat_last_n": 256, "min_p": 0.05,
+    }
+    if params.get("top_p") is not None:
+        body["top_p"] = float(params["top_p"])
+    req = urllib.request.Request(f"http://127.0.0.1:{INTERNAL_PORT}/v1/chat/completions",
+                                 data=json.dumps(body).encode("utf-8"), method="POST",
+                                 headers={"Content-Type": "application/json"})
+    resp = urllib.request.urlopen(req, timeout=600)
+    j = json.loads(resp.read().decode("utf-8"))
+    out = j["choices"][0]["message"].get("content") or ""
+    usage = j.get("usage", {})
+    mdl = j.get("model", "local")
+    m = re.search(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", out, re.S)
+    if tools and m:
+        try:
+            obj = json.loads(m.group(1))
+            name = obj.get("name", "")
+            args = obj.get("arguments", {}) or {}
+            if name:
+                tc = [{"id": "loc_" + name, "type": "function",
+                       "function": {"name": name, "arguments": json.dumps(args)}}]
+                return {"finish": "tool_calls", "text": out[:m.start()].strip(),
+                        "tool_calls": [{"id": "loc_" + name, "name": name, "args": args}],
+                        "assistant_msg": {"role": "assistant", "content": out, "tool_calls": tc},
+                        "model": mdl, "usage": usage}
+        except Exception:
+            pass
+    return {"finish": "stop", "text": out, "tool_calls": [], "model": mdl, "usage": usage}
+
+
+_TURN_FN = {"openai": _openai_turn, "anthropic": _anthropic_turn,
+            "gemini": _gemini_turn, "local": _local_turn}
+
+
+def run_tool_loop(provider, p, model, messages, params, registry, allow,
+                  user_id=None, agent_id=None, hop_limit=8):
+    """Drive a multi-hop chat: call provider → if it wants tools, execute them
+    via the MCP registry → feed results back → repeat until a text answer or the
+    hop limit. Returns {content, model, usage, tool_trace}."""
+    turn_fn = _TURN_FN.get(provider)
+    if not turn_fn:
+        raise ValueError(f"no turn fn for provider {provider}")
+    tools = registry.tools_for_provider(provider, allow) if registry else None
+    history = [dict(m) for m in messages]
+    trace = []
+    total_usage = {"prompt_tokens": 0, "completion_tokens": 0}
+    final_model = model
+    for hop in range(1, hop_limit + 1):
+        r = turn_fn(p, model, history, params, tools)
+        final_model = r.get("model", model)
+        u = r.get("usage", {})
+        total_usage["prompt_tokens"] += int(u.get("prompt_tokens", 0) or 0)
+        total_usage["completion_tokens"] += int(u.get("completion_tokens", 0) or 0)
+        if r["finish"] != "tool_calls" or not r["tool_calls"]:
+            return {"content": r["text"], "model": final_model,
+                    "usage": total_usage, "tool_trace": trace}
+        # Record the assistant's tool-call turn, then execute each call.
+        history.append(r["assistant_msg"])
+        for call in r["tool_calls"]:
+            try:
+                res = registry.call(call["name"], call["args"],
+                                    user_id=user_id, agent_id=agent_id, hop=hop)
+                ok = res.get("ok", False)
+                payload = res.get("result") if ok else {"error": res.get("error")}
+            except Exception as e:
+                ok = False
+                payload = {"error": str(e)[:300]}
+            content_str = json.dumps(payload, ensure_ascii=False, default=str)
+            trace.append({"tool": call["name"], "args": call["args"],
+                          "ok": ok, "result": payload})
+            tool_msg = {"role": "tool", "tool_call_id": call["id"],
+                        "name": call["name"], "content": content_str}
+            if provider == "local":
+                tool_msg["_tool_text"] = content_str
+            history.append(tool_msg)
+    # Hop limit hit — return whatever text we have plus a note.
+    return {"content": (r.get("text") or "") +
+            "\n\n_(Reached the tool-call limit of "
+            f"{hop_limit} hops.)_", "model": final_model,
+            "usage": total_usage, "tool_trace": trace}
 
 
 def proxy(handler, path):
@@ -2513,6 +2835,39 @@ class Handler(BaseHTTPRequestHandler):
         model = (d.get("model") or "").strip()
 
         try:
+            # ─── MCP in-chat tool-calling (v1.4.0) ───────────────────────
+            # When the UI/agent enables tools, drive the multi-hop tool loop
+            # for whichever provider is active. Falls through to the plain
+            # single-shot paths below when tools are off.
+            if d.get("use_tools"):
+                registry = _get_mcp_registry()
+                if registry is not None:
+                    allow = agent.get("tools") if (agent and agent.get("tools")) else None
+                    if provider == "local":
+                        if STATE.get("load_state") == "failed" and STATE.get("load_error"):
+                            return self._send_json(503, {"error": "model_load_failed",
+                                "detail": STATE["load_error"], "model": STATE.get("current_model", "")})
+                        pp, use_model = {}, "local"
+                    else:
+                        providers = load_providers()
+                        pp = providers.get(provider)
+                        if not pp:
+                            return self._send_json(400, {"error": "unknown_provider", "provider": provider})
+                        if not pp.get("enabled"):
+                            return self._send_json(400, {"error": "provider_disabled", "provider": provider})
+                        if not pp.get("api_key"):
+                            return self._send_json(400, {"error": "api_key_missing", "provider": provider})
+                        use_model = model or pp.get("default_model", "")
+                    out = run_tool_loop(provider, pp, use_model, clean, params, registry,
+                                        allow, user_id=u["id"])
+                    return self._send_json(200, {
+                        "content":  out["content"],
+                        "model":    out["model"],
+                        "usage":    out["usage"],
+                        "provider": provider,
+                        "tool_trace": out["tool_trace"],
+                    })
+
             if provider == "local":
                 # If the engine is in a known-failed state, fail fast instead of
                 # timing out — and tell the user why.

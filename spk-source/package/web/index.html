@@ -880,10 +880,39 @@ html[dir="rtl"] .msg-content { text-align: right; }
     display: inline-flex; align-items: center; gap: 4px;
 }
 .ct-btn:hover { background: var(--bg); color: var(--text); }
+.ct-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
 @media (max-width: 640px) {
     .chat-toolbar { gap: 4px; }
     .ct-select { max-width: 120px; font-size: 12px; }
     .ct-btn span { display: none; }
+}
+
+/* Tool-call trace shown above an assistant message that used MCP tools */
+.tool-trace { margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; }
+.tool-call {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-elev);
+    font-size: 12px;
+    overflow: hidden;
+}
+.tool-call > summary {
+    cursor: pointer; padding: 6px 10px; list-style: none;
+    display: flex; align-items: center; gap: 6px;
+    user-select: none;
+}
+.tool-call > summary::-webkit-details-marker { display: none; }
+.tool-call.tool-fail { border-color: var(--danger); }
+.tool-call .tt-row { padding: 4px 10px 8px; }
+.tool-call .tt-row b { color: var(--text-dim); font-size: 11px; text-transform: uppercase; }
+.tool-call pre {
+    margin: 4px 0 0; padding: 8px; background: var(--bg);
+    border-radius: 6px; overflow-x: auto; font-size: 11px;
+    direction: ltr; text-align: left;
 }
 
 /* Lang pill in topbar */
@@ -1011,6 +1040,7 @@ html[dir="rtl"] .user-menu-dropdown { right: auto; left: 0; }
                 <select class="ct-select" id="modelSelectBottom" title="Model"></select>
             </div>
             <div class="ct-spacer"></div>
+            <button class="ct-btn" id="btnUseTools" data-i18n-title="toolbar.use_tools_title" title="Let the assistant call MCP tools during this chat">🔧 <span data-i18n="toolbar.use_tools">Use tools</span></button>
             <button class="ct-btn" id="btnToolsBottom" data-i18n-title="toolbar.tools_title" title="Tools (insert helpers)">🧰 <span data-i18n="toolbar.tools">Tools</span></button>
             <button class="ct-btn" id="btnFilesBottom" data-i18n-title="toolbar.files_title" title="Files (opens MCP filesystem tools)">📁 <span data-i18n="toolbar.files">Files</span></button>
             <button class="ct-btn" id="btnMcpBottom" data-i18n-title="toolbar.mcp_title" title="Open MCP tool servers">🔌 <span data-i18n="toolbar.mcp">MCP</span></button>
@@ -1507,6 +1537,7 @@ const STATE = {
     provider: "local",
     providerModel: "",
     providers: {},
+    useTools: false,
     settings: {
         system: "",
         temp: 0.7, topP: 0.95, topK: 40, minP: 0.05,
@@ -1851,6 +1882,7 @@ async function resendFromConv() {
             max_tokens: Math.max(1, parseInt(s.maxTok) || 512),
             provider: STATE.provider || "local",
             agent_id: STATE.modeId,
+            use_tools: !!STATE.useTools,
         };
         if (STATE.providerModel) body.model = STATE.providerModel;
         const resp = await fetch(serverURL() + "/api/chat", {
@@ -1868,7 +1900,18 @@ async function resendFromConv() {
         const last = conv.messages[conv.messages.length-1];
         last.content = text;
         last.meta = (j.usage && j.usage.completion_tokens ? j.usage.completion_tokens + " tokens" : "");
-        if (lastMsgEl) lastMsgEl.innerHTML = renderMarkdown(text || "(empty)");
+        // Render a compact summary of any tools the assistant invoked this turn.
+        let toolHtml = "";
+        if (Array.isArray(j.tool_trace) && j.tool_trace.length) {
+            last.tool_trace = j.tool_trace;
+            toolHtml = `<div class="tool-trace">` + j.tool_trace.map(t =>
+                `<details class="tool-call ${t.ok ? "" : "tool-fail"}">
+                    <summary>${t.ok ? "🔧" : "⚠️"} <code>${escapeHtml(t.tool)}</code></summary>
+                    <div class="tt-row"><b>args</b><pre>${escapeHtml(JSON.stringify(t.args, null, 2))}</pre></div>
+                    <div class="tt-row"><b>result</b><pre>${escapeHtml(JSON.stringify(t.result, null, 2).slice(0, 2000))}</pre></div>
+                </details>`).join("") + `</div>`;
+        }
+        if (lastMsgEl) lastMsgEl.innerHTML = toolHtml + renderMarkdown(text || "(empty)");
     } catch (e) {
         if (e.name !== "AbortError") {
             const last = conv.messages[conv.messages.length-1];
@@ -3315,6 +3358,16 @@ function init() {
     document.getElementById("btnToolsBottom").addEventListener("click", openToolsMenu);
     document.getElementById("btnFilesBottom").addEventListener("click", openFilesMenu);
     document.getElementById("btnMcpBottom").addEventListener("click", openMcpMenu);
+    const btnUseTools = document.getElementById("btnUseTools");
+    if (btnUseTools) {
+        STATE.useTools = localStorage.getItem("filamind_use_tools") === "1";
+        btnUseTools.classList.toggle("active", STATE.useTools);
+        btnUseTools.addEventListener("click", () => {
+            STATE.useTools = !STATE.useTools;
+            btnUseTools.classList.toggle("active", STATE.useTools);
+            localStorage.setItem("filamind_use_tools", STATE.useTools ? "1" : "0");
+        });
+    }
 
     renderModes();
     updateModePill();

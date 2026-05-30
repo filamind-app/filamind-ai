@@ -17,6 +17,34 @@ Following [Keep a Changelog](https://keepachangelog.com/) — تصنيفات: **
 
 ---
 
+## [1.4.0] — 2026-05-27
+
+**استدعاء الأدوات داخل المحادثة — الميزة التي كان عنوانها يسبق تنفيذها أصبحت حقيقية** · In-chat MCP tool-calling: the headline feature that v1.3.0 announced but never wired is now actually built and tested.
+
+### Added — the real tool-call loop
+- **`run_tool_loop()`** in `control_daemon.py` — a provider-agnostic multi-hop driver that finally connects the MCP runtime to the chat path. Flow: send the conversation + tool definitions to the model → if the model emits tool calls, execute each via `MCPRegistry.call()` → append the results → repeat until the model returns a plain answer or the 8-hop limit. Token usage accumulates across hops; a structured `tool_trace` is returned for the UI.
+- **Per-provider "turn" functions** — each converts the canonical OpenAI-shaped history to its provider's native tool wire-format and parses tool calls back out:
+  - **`_openai_turn`** — native `tools` + `tool_calls` (assistant) + `role:"tool"` results.
+  - **`_anthropic_turn`** — `tool_use` content blocks + `tool_result` inside a user turn + `stop_reason:"tool_use"` detection.
+  - **`_gemini_turn`** — `function_declarations` + `functionCall` parts + `functionResponse` parts.
+  - **`_local_turn`** — b1620 has no native tools, so it **emulates** them: tool schemas are injected into the system prompt and the model is asked to emit `<tool_call>{…}</tool_call>`, which is parsed and executed. Best-effort — surfaced honestly in the UI.
+- **`use_tools` flag** on `POST /api/chat` — when set, the loop runs for whichever provider is active. Off by default → existing single-shot paths untouched.
+- **Per-agent tool allow-list** — `agents` table gains a `tools` JSON column (migrated in place). Empty = all enabled tools offered.
+- **UI — "🔧 Use tools" toggle** in the chat toolbar (persisted in `localStorage`). Each turn that used tools renders an expandable **tool-trace** above the answer (tool name, arguments, result; red header on failure).
+
+### Verified
+- End-to-end test: a "what is 6×7?" prompt drives the model to call `calculator.eval({"expression":"6*7"})`; the registry executes it (→ 42), the result is fed back, the model answers from it, and the trace + accumulated usage are captured. Cloud providers do this natively and reliably; the local b1620 emulation works but is hit-or-miss.
+
+### Honesty note
+- This is the feature v1.3.0's headline claimed ("call tools mid-conversation") but never shipped. As of v1.4.0 the claim is **true**. The v1.3.0 entry and the in-app MCP tab were updated accordingly.
+
+### Still on the roadmap
+- Per-agent tool-picker **UI** (backend column + allow-list logic ship now).
+- Tier-B cloud tool servers (web search, GitHub, Home Assistant, Synology APIs).
+- DS1821+ real AVX2 binary (still a stub — tracked separately).
+
+---
+
 ## [1.3.2] — 2026-05-27
 
 تحصين أمني + إصلاحات واجهة + تصحيح الادعاءات لتطابق الواقع · Security hardening + UI fixes + honesty pass (claims corrected to match reality).
