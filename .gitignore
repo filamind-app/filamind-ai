@@ -19,6 +19,7 @@ llama-server-gpu
 llama-server-*
 spk-source/package/bin/llama-server
 spk-source/package/bin/llama-main
+ds1821-llama-server
 *.o
 *.a
 *.so

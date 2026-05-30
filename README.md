@@ -80,12 +80,16 @@ bash build_spk.sh            # package SPK
 # Output: SaynologyAI.spk → install via DSM Package Center
 ```
 
-### DS1821+ (CPU build)
+### DS1821+ (CPU build) — ✅ verified working on-device (v1.4.1)
 ```bash
 git checkout device/ds1821-plus
-bash build_llama_cpu_avx2.sh # CPU-only with -march=znver1 (Ryzen V1500B)
+# Option A — native WSL/Linux gcc, static libstdc++ (what shipped in v1.4.1):
+bash build_ds1821_native.sh    # clones llama.cpp b4400, builds AVX2 llama-server
+# Option B — Synology v1000 cross-toolchain (higher fidelity, needs the toolchain):
+bash build_llama_cpu_avx2.sh
 bash build_spk.sh
 ```
+The prebuilt binary is already committed on this branch, so `build_spk.sh` alone produces a working SPK. Verified on a real DS1821+: loads Mistral-7B Q4 and serves completions (`AVX2=1 FMA=1 F16C=1`).
 
 Requires WSL2 (Ubuntu) on Windows or any Linux host with the Synology toolchain (`gcc 12.2` for `denverton`, `gcc 12.2` for `v1000`).
 
