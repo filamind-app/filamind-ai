@@ -6,14 +6,39 @@
 
 Local LLM chat for Synology NAS. Two reference devices:
 - **DVA 3221** (Intel Atom C3538, NVIDIA GTX 1650 4 GB, 64 GB RAM, DSM 7.2.1, CUDA 10.1) — GPU build on branch `device/dva3221`. **✅ Fully functional** (verified ~80 tok/s on TinyLlama, GPU-offloaded).
-- **DS1821+** (AMD Ryzen V1500B with AVX2, 62 GB RAM, no GPU) — CPU build on branch `device/ds1821-plus`. **⚠️ NOT yet functional** — the SPK installs and the daemon runs, but the `llama-server` binary is currently a build-stub placeholder. A real AVX2 binary still needs to be compiled via `build_llama_cpu_avx2.sh` and committed. Until then this device cannot run inference. See `spk-source/DEVICE.md` on that branch.
+- **DS1821+** (AMD Ryzen V1500B with AVX2, 62 GB RAM, no GPU) — CPU build on branch `device/ds1821-plus`. **✅ Functional as of v1.4.1** — a real AVX2 `llama-server` (llama.cpp b4400, static libstdc++) is now built and committed. **Verified on the actual device:** loads Mistral-7B-Instruct Q4_K_M and serves real completions over HTTP (`system_info: AVX2=1 FMA=1 F16C=1`). CPU-speed (no GPU), but it genuinely runs — and unlocks modern model families the DVA 3221's CUDA-10 build can't load.
 
-تطبيق محادثة ذكاء اصطناعي محلي لـ Synology NAS. **DVA 3221 يعمل بالكامل؛ DS1821+ لم يُفعَّل بعد** (الـ binary حالياً placeholder — يلزم بناء نسخة AVX2 حقيقية).
+تطبيق محادثة ذكاء اصطناعي محلي لـ Synology NAS. **كلا الجهازين يعملان الآن** — DVA 3221 بتسريع GPU، و DS1821+ بمعالج Ryzen (AVX2) بعد بناء واختبار binary حقيقي على الجهاز نفسه (v1.4.1).
 
 **Maintainer · المطوّر:** Abdelmonem Awad — eg2@live.com
 **Repository · الريبو:** https://github.com/filamind-app/filamind-ai
 
 Following [Keep a Changelog](https://keepachangelog.com/) — تصنيفات: **Added · Changed · Fixed · Security · Removed · Deprecated**.
+
+---
+
+## [1.4.1] — 2026-05-30
+
+**DS1821+ أصبح حقيقياً — binary AVX2 مبني ومُختبَر على الجهاز** · DS1821+ goes from stub to real: AVX2 llama-server built and verified on the actual device.
+
+### Added
+- **Real `llama-server` for DS1821+** (`device/ds1821-plus` branch) — replaces the 5-byte `stub` placeholder with a genuine 5.7 MB binary:
+  - llama.cpp **b4400**, CPU-only, compiled with `-march=znver1 -mavx2 -mfma -mf16c`.
+  - **Static `libstdc++`/`libgcc`** so it runs on DSM 7.2's glibc 2.36 despite being built on Ubuntu 22.04 (glibc 2.35). Runtime deps are only `libc`/`libm`/`ld-linux` (verified via `ldd`).
+  - Built with `GGML_OPENMP=OFF` + `LLAMA_CURL=OFF` to keep the dependency surface minimal.
+- **On-device verification (192.168.0.250):**
+  - `./llama-server --version` → `version: 1 (6e1531a)` — executes cleanly, no "Exec format error", no glibc mismatch.
+  - Loaded `mistral-7b-instruct-v0.2-q4_k_m.gguf` (291 tensors), `system_info` reports `AVX2 = 1 | FMA = 1 | F16C = 1`.
+  - `/health` → `{"status":"ok"}`; a real chat completion returned actual generated text.
+- **`build_ds1821_native.sh`** — the reproducible native-toolchain build recipe (an alternative to the Synology-toolchain path in `build_llama_cpu_avx2.sh`, which requires downloading the v1000 cross-toolchain).
+
+### Changed
+- **DS1821+ marked functional** in the README, the top-of-changelog device table, and `device/ds1821-plus`'s `DEVICE.md` — replacing the honest "not yet functional / stub" notes from v1.3.2.
+- The DS1821+ SPK in releases is now a working package, not a stub-carrying placeholder.
+
+### Notes
+- This is one of the two "missing features" called out in the v1.3.x honesty audit (the other — in-chat MCP tool-calling — shipped in v1.4.0). Both are now genuinely built and verified.
+- Performance is CPU-bound: expect a few tokens/sec on 7B Q4 (the 62 GB RAM comfortably holds much larger models than the DVA 3221's 4 GB VRAM, at lower speed).
 
 ---
 
