@@ -74,6 +74,23 @@ With a current llama.cpp release, **everything llama.cpp supports works**, inclu
 
 ## Status
 
-⚠️ **Build script `build_llama_cpu_avx2.sh` is not yet committed.** This branch holds the
-INFO/scripts/docs delta from `main`; the actual binary will be added once the V1500B
-build is verified end-to-end. Open an issue if you want to help validate it.
+✅ **Functional as of v1.4.1 — verified on a real DS1821+ (192.168.0.250).**
+
+The committed `spk-source/package/bin/llama-server` is a genuine **5.7 MB** binary:
+- llama.cpp **b4400**, CPU-only, `-march=znver1 -mavx2 -mfma -mf16c`.
+- **Static libstdc++/libgcc** → runs on DSM 7.2 (glibc 2.36) though built on Ubuntu 22.04 (glibc 2.35). `ldd` shows only `libc`/`libm`/`ld-linux`.
+- Built with `GGML_OPENMP=OFF` + `LLAMA_CURL=OFF`.
+
+On-device test results:
+```
+$ ./llama-server --version
+version: 1 (6e1531a)                     # executes — no Exec-format/glibc error
+# loading mistral-7b-instruct-v0.2-q4_k_m.gguf (291 tensors)
+system_info: ... | AVX2 = 1 | F16C = 1 | FMA = 1 | LLAMAFILE = 1 |
+main: HTTP server is listening, port 8199
+$ curl /health  -> {"status":"ok"}
+$ curl /v1/chat/completions -> real generated text ✓
+```
+
+Rebuild from source: `bash build_ds1821_native.sh` (native gcc + static stdc++) or
+`bash build_llama_cpu_avx2.sh` (Synology v1000 cross-toolchain).
