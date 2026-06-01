@@ -171,7 +171,7 @@ jobs:
           python3 docs/_build_packages_json.py "$VERSION" > _pages/packages.json
           ls -la _pages/
           cat _pages/packages.json
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _pages
